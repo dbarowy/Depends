@@ -1,0 +1,6 @@
+[submodule "parcel"]
+	path = parcel
+	url = git@github.com:plasma-umass/parcel.git
+[submodule "ParcelCOMShim"]
+	path = ParcelCOMShim
+	url = git@github.com:dbarowy/ParcelCOMShim.git
