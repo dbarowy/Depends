@@ -4,8 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Excel = Microsoft.Office.Interop.Excel;
-using CellRefDict = DataDebugMethods.BiDictionary<AST.Address, ParcelCOMShim.COMRef>;
-using VectorRefDict = DataDebugMethods.BiDictionary<AST.Range, ParcelCOMShim.COMRef>;
+using CellRefDict = Depends.BiDictionary<AST.Address, ParcelCOMShim.COMRef>;
+using VectorRefDict = Depends.BiDictionary<AST.Range, ParcelCOMShim.COMRef>;
 using FormulaDict = System.Collections.Generic.Dictionary<AST.Address, string>;
 using Formula2VectDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Range>>;
 using Vect2FormulaDict = System.Collections.Generic.Dictionary<AST.Range, System.Collections.Generic.HashSet<AST.Address>>;
@@ -14,7 +14,7 @@ using InputCell2VectDict = System.Collections.Generic.Dictionary<AST.Address, Sy
 using Formula2InputCellDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Address>>;
 using InputCell2FormulaDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Address>>;
 
-namespace DataDebugMethods
+namespace Depends
 {
     public class DAG
     {
