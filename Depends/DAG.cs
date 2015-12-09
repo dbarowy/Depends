@@ -568,5 +568,40 @@ namespace Depends
         {
             return _all_cells.KeysT.ToArray();
         }
+
+        public AST.Address[] getFormulasThatRefCell(AST.Address cell)
+        {
+            if (_i2f.ContainsKey(cell))
+            {
+                return _i2f[cell].ToArray();
+            }
+            else
+            {
+                return new AST.Address[] { };
+            }
+        }
+
+        public AST.Address[] getFormulasThatRefVector(AST.Range rng)
+        {
+            if (_v2f.ContainsKey(rng))
+            {
+                return _v2f[rng].ToArray();
+            }
+            else
+            {
+                return new AST.Address[] { };
+            }
+        }
+
+        public AST.Range[] getVectorsThatRefCell(AST.Address cell)
+        {
+            if (_i2v.ContainsKey(cell))
+            {
+                return _i2v[cell].ToArray();
+            } else
+            {
+                return new AST.Range[] { };
+            }
+        }
     }
 }
