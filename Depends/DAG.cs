@@ -177,7 +177,7 @@ namespace Depends
 
                     var addr = AST.Address.fromR1C1(r, c, wsname, wbname, path);
                     var formula = _formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(_formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
-                    var cr = new ParcelCOMShim.COMRef(addr.A1FullyQualified(), wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
+                    var cr = new ParcelCOMShim.COMRef(wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
                     _all_cells.Add(addr, cr);
 
                     x_old = x;
@@ -240,7 +240,7 @@ namespace Depends
                 int width = com.Columns.Count;
                 int height = com.Rows.Count;
 
-                c = new ParcelCOMShim.COMRef(rng.getUniqueID(), wb, ws, com, path, wbname, wsname, Microsoft.FSharp.Core.FSharpOption<string>.None, width, height);
+                c = new ParcelCOMShim.COMRef(wb, ws, com, path, wbname, wsname, Microsoft.FSharp.Core.FSharpOption<string>.None, width, height);
                 _all_vectors.Add(rng, c);
                 _do_not_perturb.Add(rng, true);    // initially mark as not perturbable
             }
