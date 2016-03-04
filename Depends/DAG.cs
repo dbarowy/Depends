@@ -18,8 +18,8 @@ namespace Depends
 {
     public class DAG
     {
+        private string _workbookPath;
         private Excel.Application _app;
-        private Excel.Workbook _wb;
         private CellRefDict _all_cells = new CellRefDict();                 // maps every cell (including formulas) to its COMRef
         private VectorRefDict _all_vectors = new VectorRefDict();           // maps every vector to its COMRef
         private FormulaDict _formulas = new FormulaDict();                  // maps every formula to its formula expr
@@ -35,16 +35,18 @@ namespace Depends
 
         public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors)
         {
+            // TODO: REMOVE, TEMPORARY
+            _app = app;
+
             // start stopwatch
             var sw = new System.Diagnostics.Stopwatch();
             sw.Start();
 
             // save application & workbook references
-            _app = app;
-            _wb = wb;
+            _workbookPath = wb.Path;
 
             // bulk read worksheets
-            fastFormulaRead();
+            fastFormulaRead(wb);
 
             // extract references from formulas
             foreach (AST.Address formula_addr in this.getAllFormulaAddrs())
@@ -55,7 +57,7 @@ namespace Depends
                 foreach (AST.Range vector_rng in Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors))
                 {
                     // fetch/create COMRef, as appropriate
-                    var vector_ref = this.makeInputVectorCOMRef(vector_rng);
+                    var vector_ref = this.makeInputVectorCOMRef(vector_rng, app);
 
                     // link formula and input vector
                     this.linkInputVector(formula_addr, vector_rng);
@@ -92,12 +94,12 @@ namespace Depends
             return all.Count();
         }
 
-        private void fastFormulaRead()
+        private void fastFormulaRead(Excel.Workbook wb)
         {
             // get names once
-            var wbfullname = _wb.FullName;
-            var wbname = _wb.Name;
-            var path = _wb.Path;
+            var wbfullname = wb.FullName;
+            var wbname = wb.Name;
+            var path = wb.Path;
 
             // init R1C1 extractor
             var regex = new Regex("^R([0-9]+)C([0-9]+)$");
@@ -105,7 +107,7 @@ namespace Depends
             // init formula validator
             var fn_filter = new Regex("^=", RegexOptions.Compiled);
 
-            foreach (Excel.Worksheet worksheet in _wb.Worksheets)
+            foreach (Excel.Worksheet worksheet in wb.Worksheets)
             {
                 // get used range
                 Excel.Range urng = worksheet.UsedRange;
@@ -179,7 +181,7 @@ namespace Depends
 
                     var addr = AST.Address.fromR1C1(r, c, wsname, wbname, path);
                     var formula = _formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(_formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
-                    var cr = new ParcelCOMShim.COMRef(_wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
+                    var cr = new ParcelCOMShim.COMRef(wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
                     _all_cells.Add(addr, cr);
 
                     x_old = x;
@@ -226,14 +228,14 @@ namespace Depends
             return _formulas.Keys.ToArray();
         }
 
-        public ParcelCOMShim.COMRef makeInputVectorCOMRef(AST.Range rng)
+        public ParcelCOMShim.COMRef makeInputVectorCOMRef(AST.Range rng, Excel.Application app)
         {
             // check for the range in the dictionary
             ParcelCOMShim.COMRef c;
             if (!_all_vectors.TryGetValue(rng, out c))
             {
                 // otherwise, create and cache it
-                Excel.Range com = ParcelCOMShim.Range.GetCOMObject(rng, _app);
+                Excel.Range com = ParcelCOMShim.Range.GetCOMObject(rng, app);
                 Excel.Worksheet ws = com.Worksheet;
                 Excel.Workbook wb = ws.Parent;
                 string wsname = ws.Name;
@@ -374,7 +376,7 @@ namespace Depends
             sb.Append("digraph spreadsheet {\n");
             foreach (AST.Address formula_addr in _formulas.Keys)
             {
-                sb.Append(ToDOT(formula_addr, visited));
+                ToDOT(formula_addr, visited, sb);
             }
             sb.Append("\n}\n");
             return sb.ToString();
@@ -390,21 +392,20 @@ namespace Depends
             return "\"" + addr.A1Local() + "[" + (_formulas.ContainsKey(addr) ? DOTEscapedFormulaString(_formulas[addr]) : readCOMValueAtAddress(addr)) + "]\"";
         }
 
-        private string ToDOT(AST.Address current_addr, HashSet<AST.Address> visited)
+        private void ToDOT(AST.Address current_addr, HashSet<AST.Address> visited, StringBuilder sb)
         {
             // base case 1: loop protection
             if (visited.Contains(current_addr))
             {
-                return "";
+                return;
             }
             // base case 2: an input
             if (!_formulas.ContainsKey(current_addr))
             {
-                return "";
+                return;
             }
             // case 3: a formula
 
-            String s = "";
             var ca_name = DOTNodeName(current_addr);
 
             // 3a. single-cell input 
@@ -414,23 +415,25 @@ namespace Depends
                 var ia_name = DOTNodeName(input_addr);
 
                 // print
-                s += ia_name + " -> " + ca_name + ";\n";
+                sb.Append(ia_name).Append(" -> ").Append(ca_name).Append(";\n");
 
                 // mark visit
                 visited.Add(input_addr);
 
                 // recurse
-                s += ToDOT(input_addr, visited);
+                ToDOT(input_addr, visited, sb);
             }
 
             // 3b. vector input
             HashSet<AST.Range> vector_inputs = _f2v[current_addr];
             foreach (AST.Range v_addr in vector_inputs)
             {
+                var rng_name2 = v_addr.A1Local();
+
                 var rng_name = "\"" + ParcelCOMShim.Range.GetCOMObject(v_addr, _app).Address + "\"";
 
                 // print
-                s += rng_name + " -> " + ca_name + ";\n";
+                sb.Append(rng_name).Append(" -> ").Append(ca_name).Append(";\n");
 
                 // recurse
                 foreach (AST.Address input_addr in v_addr.Addresses())
@@ -438,16 +441,15 @@ namespace Depends
                     var ia_name = DOTNodeName(input_addr);
 
                     // print
-                    s += ia_name + " -> " + rng_name + ";\n";
+                    sb.Append(ia_name).Append(" -> ").Append(rng_name).Append(";\n");
 
                     // mark visit
                     visited.Add(input_addr);
 
-                    s += ToDOT(input_addr, visited);
+                    // recurse
+                    ToDOT(input_addr, visited, sb);
                 }
             }
-
-            return s;
         }
 
         public AST.Address[] terminalFormulaNodes(bool all_outputs)
@@ -610,7 +612,7 @@ namespace Depends
 
         public string getWorkbookPath()
         {
-            return _wb.Path;
+            return _workbookPath;
         }
     }
 }
