@@ -19,6 +19,7 @@ namespace Depends
     public class DAG
     {
         private Excel.Application _app;
+        private Excel.Workbook _wb;
         private CellRefDict _all_cells = new CellRefDict();                 // maps every cell (including formulas) to its COMRef
         private VectorRefDict _all_vectors = new VectorRefDict();           // maps every vector to its COMRef
         private FormulaDict _formulas = new FormulaDict();                  // maps every formula to its formula expr
@@ -38,11 +39,12 @@ namespace Depends
             var sw = new System.Diagnostics.Stopwatch();
             sw.Start();
 
-            // get application reference
+            // save application & workbook references
             _app = app;
+            _wb = wb;
 
             // bulk read worksheets
-            fastFormulaRead(wb);
+            fastFormulaRead();
 
             // extract references from formulas
             foreach (AST.Address formula_addr in this.getAllFormulaAddrs())
@@ -90,12 +92,12 @@ namespace Depends
             return all.Count();
         }
 
-        private void fastFormulaRead(Excel.Workbook wb)
+        private void fastFormulaRead()
         {
             // get names once
-            var wbfullname = wb.FullName;
-            var wbname = wb.Name;
-            var path = wb.Path;
+            var wbfullname = _wb.FullName;
+            var wbname = _wb.Name;
+            var path = _wb.Path;
 
             // init R1C1 extractor
             var regex = new Regex("^R([0-9]+)C([0-9]+)$");
@@ -103,7 +105,7 @@ namespace Depends
             // init formula validator
             var fn_filter = new Regex("^=", RegexOptions.Compiled);
 
-            foreach (Excel.Worksheet worksheet in wb.Worksheets)
+            foreach (Excel.Worksheet worksheet in _wb.Worksheets)
             {
                 // get used range
                 Excel.Range urng = worksheet.UsedRange;
@@ -177,7 +179,7 @@ namespace Depends
 
                     var addr = AST.Address.fromR1C1(r, c, wsname, wbname, path);
                     var formula = _formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(_formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
-                    var cr = new ParcelCOMShim.COMRef(wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
+                    var cr = new ParcelCOMShim.COMRef(_wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
                     _all_cells.Add(addr, cr);
 
                     x_old = x;
@@ -602,6 +604,11 @@ namespace Depends
             {
                 return new AST.Range[] { };
             }
+        }
+
+        public string getWorkbookPath()
+        {
+            return _wb.Path;
         }
     }
 }
