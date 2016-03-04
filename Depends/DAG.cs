@@ -370,12 +370,14 @@ namespace Depends
         public string ToDOT()
         {
             var visited = new HashSet<AST.Address>();
-            String s = "digraph spreadsheet {\n";
+            StringBuilder sb = new StringBuilder();
+            sb.Append("digraph spreadsheet {\n");
             foreach (AST.Address formula_addr in _formulas.Keys)
             {
-                s += ToDOT(formula_addr, visited);
+                sb.Append(ToDOT(formula_addr, visited));
             }
-            return s + "\n}";
+            sb.Append("\n}\n");
+            return sb.ToString();
         }
 
         private string DOTEscapedFormulaString(string formula)
