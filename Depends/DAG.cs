@@ -18,7 +18,9 @@ namespace Depends
 {
     public class DAG
     {
-        private string _workbookPath;
+        private string _path;
+        private string _wbname;
+        private string[] _wsnames;
         private Excel.Application _app;
         private CellRefDict _all_cells = new CellRefDict();                 // maps every cell (including formulas) to its COMRef
         private VectorRefDict _all_vectors = new VectorRefDict();           // maps every vector to its COMRef
@@ -43,7 +45,13 @@ namespace Depends
             sw.Start();
 
             // save application & workbook references
-            _workbookPath = wb.Path;
+            _path = wb.Path;
+            _wbname = wb.Name;
+            _wsnames = new string[wb.Worksheets.Count];
+            for (int i = 1; i <= wb.Worksheets.Count; i++)
+            {
+                _wsnames[i - 1] = wb.Worksheets[i].Name;
+            }
 
             // bulk read worksheets
             fastFormulaRead(wb);
@@ -610,9 +618,25 @@ namespace Depends
             }
         }
 
+        public string getWorkbookDirectory()
+        {
+            return _path;
+        }
+
+        public string getWorkbookName()
+        {
+            return _wbname;
+        }
+
         public string getWorkbookPath()
         {
-            return _workbookPath;
+            string[] paths = { _path, _wbname };
+            return System.IO.Path.Combine(paths);
+        }
+
+        public string[] getWorksheetNames()
+        {
+            return _wsnames;
         }
     }
 }
