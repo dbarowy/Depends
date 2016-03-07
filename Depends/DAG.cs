@@ -13,16 +13,21 @@ using Vect2InputCellDict = System.Collections.Generic.Dictionary<AST.Range, Syst
 using InputCell2VectDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Range>>;
 using Formula2InputCellDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Address>>;
 using InputCell2FormulaDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Address>>;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Runtime.Serialization;
+using System.IO;
 
 namespace Depends
 {
+    [Serializable]
     public class DAG
     {
         private string _path;
         private string _wbname;
         private string[] _wsnames;
-        private Excel.Application _app;
+        [NonSerialized]
         private CellRefDict _all_cells = new CellRefDict();                 // maps every cell (including formulas) to its COMRef
+        [NonSerialized]
         private VectorRefDict _all_vectors = new VectorRefDict();           // maps every vector to its COMRef
         private FormulaDict _formulas = new FormulaDict();                  // maps every formula to its formula expr
         private Formula2VectDict _f2v = new Formula2VectDict();             // maps every formula to its input vectors
@@ -35,11 +40,68 @@ namespace Depends
         private Dictionary<AST.Address, int> _weights = new Dictionary<AST.Address, int>();         // graph node weight
         private readonly long _analysis_time;                               // amount of time to run dependence analysis
 
+        private static string SerializationPath(string dirpath, string wbname)
+        {
+            string[] paths = { dirpath, "EXCELINT_" + wbname + ".bin" };
+            return Path.Combine(paths);
+        }
+
+        public void SerializeToDirectory(string dirpath)
+        {
+            IFormatter formatter = new BinaryFormatter();
+            Stream stream = new FileStream(SerializationPath(dirpath, _wbname), FileMode.Create, FileAccess.Write, FileShare.None);
+            try
+            {
+                formatter.Serialize(stream, this);
+            } catch (Exception e)
+            {
+                var message = e.Message;
+                System.Console.WriteLine(message);
+            }
+            stream.Close();
+        }
+
+        public static DAG DAGFromCache(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, string cacheDirPath)
+        {
+            // get path
+            var fileName = SerializationPath(cacheDirPath, wb.Name);
+
+            // return DAG from cache path, otherwise build and serialize to cache path
+            if (File.Exists(fileName))
+            {
+                return DeserializeFrom(fileName);
+            } else
+            {
+                var dag = new DAG(wb, app, ignore_parse_errors);
+                dag.SerializeToDirectory(cacheDirPath);
+                return dag;
+            }
+        }
+
+        private static void reconstituteCellRefs(DAG dag, Excel.Application app)
+        {
+            var cellrefs = new KeyValuePair<AST.Address, ParcelCOMShim.COMRef>[dag._i2f.Count];
+
+            foreach (AST.Address addr in dag._i2f.Keys)
+            {
+                Excel.Range cell = ParcelCOMShim.Address.GetCOMObject(addr, app);
+            }
+
+            // TODO
+            throw new NotImplementedException("come on, dude");
+        }
+
+        public static DAG DeserializeFrom(string fileName)
+        {
+            IFormatter formatter = new BinaryFormatter();
+            Stream stream = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read);
+            DAG obj = (DAG)formatter.Deserialize(stream);
+            stream.Close();
+            return obj;
+        }
+
         public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors)
         {
-            // TODO: REMOVE, TEMPORARY
-            _app = app;
-
             // start stopwatch
             var sw = new System.Diagnostics.Stopwatch();
             sw.Start();
@@ -436,9 +498,7 @@ namespace Depends
             HashSet<AST.Range> vector_inputs = _f2v[current_addr];
             foreach (AST.Range v_addr in vector_inputs)
             {
-                var rng_name2 = v_addr.A1Local();
-
-                var rng_name = "\"" + ParcelCOMShim.Range.GetCOMObject(v_addr, _app).Address + "\"";
+                var rng_name = "\"" + v_addr.A1Local() + "\"";
 
                 // print
                 sb.Append(rng_name).Append(" -> ").Append(ca_name).Append(";\n");

@@ -5,6 +5,7 @@ using System.Text;
 
 namespace Depends
 {
+    [Serializable]
     public class BiDictionary<T, U>
     {
         Dictionary<T, U> _dict1 = new Dictionary<T, U>();
