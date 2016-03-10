@@ -13,6 +13,7 @@ using Vect2InputCellDict = System.Collections.Generic.Dictionary<AST.Range, Syst
 using InputCell2VectDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Range>>;
 using Formula2InputCellDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Address>>;
 using InputCell2FormulaDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Address>>;
+using AddrExpansion = System.Tuple<AST.Address, AST.Range[], AST.Address[]>;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 using System.IO;
@@ -118,16 +119,36 @@ namespace Depends
             // bulk read worksheets
             fastFormulaRead(wb);
 
-            // extract references from formulas
-            foreach (AST.Address formula_addr in this.getAllFormulaAddrs())
-            {
-                // get COMRef read earlier
-                var cr = this.getCOMRefForAddress(formula_addr);
+            // construct DAG
+            ConstructDAG(app, ignore_parse_errors);
 
-                foreach (AST.Range vector_rng in Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors))
+            // stop stopwatch
+            sw.Stop();
+            _analysis_time = sw.ElapsedMilliseconds;
+        }
+
+        public void ConstructDAG(Excel.Application app, bool ignore_parse_errors)
+        {
+            // run the parser in parallel
+            var aes = this.getAllFormulaAddrs().AsParallel().Select(formula_addr => {
+                var cr = this.getCOMRefForAddress(formula_addr);
+                var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
+                var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
+
+                return new AddrExpansion(formula_addr, vs, ss);
+            });
+
+            // do all the side-effecting stuff (building the graph) last
+            foreach (AddrExpansion ae in aes)
+            {
+                var formula_addr = ae.Item1;
+                var vectorRefs = ae.Item2;
+                var scalarRefs = ae.Item3;
+
+                foreach (AST.Range vector_rng in vectorRefs)
                 {
                     // fetch/create COMRef, as appropriate
-                    var vector_ref = this.makeInputVectorCOMRef(vector_rng, app);
+                    this.makeInputVectorCOMRef(vector_rng, app);
 
                     // link formula and input vector
                     this.linkInputVector(formula_addr, vector_rng);
@@ -143,16 +164,11 @@ namespace Depends
                     this.markPerturbability(vector_rng);
                 }
 
-                foreach (AST.Address input_single in Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors))
+                foreach (AST.Address input_addr in scalarRefs)
                 {
-                    // link formula and single input
-                    this.linkSingleCellInput(formula_addr, input_single);
+                    this.linkSingleCellInput(formula_addr, input_addr);
                 }
             }
-
-            // stop stopwatch
-            sw.Stop();
-            _analysis_time = sw.ElapsedMilliseconds;
         }
 
         // this is mostly for diagnostic purposes
