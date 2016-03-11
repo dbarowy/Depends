@@ -127,16 +127,45 @@ namespace Depends
             _analysis_time = sw.ElapsedMilliseconds;
         }
 
+        private Boolean NeedsWorkbookOpen(AST.Range r, HashSet<string> openWBNames)
+        {
+            foreach (Tuple<AST.Address,AST.Address> tlbr in r.Ranges())
+            {
+                var tl = tlbr.Item1;
+                var br = tlbr.Item2;
+                if (NeedsWorkbookOpen(tl, openWBNames) || NeedsWorkbookOpen(tl, openWBNames))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private Boolean NeedsWorkbookOpen(AST.Address a, HashSet<string> openWBNames)
+        {
+            var result = !openWBNames.Contains(a.WorkbookName);
+
+            return result;
+        }
+
         public void ConstructDAG(Excel.Application app, bool ignore_parse_errors)
         {
             // run the parser in parallel
-            var aes = this.getAllFormulaAddrs().AsParallel().Select(formula_addr => {
+            var aes = this.getAllFormulaAddrs().AsParallel().Select(formula_addr =>
+            {
                 var cr = this.getCOMRefForAddress(formula_addr);
                 var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
                 var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
 
                 return new AddrExpansion(formula_addr, vs, ss);
-            });
+            }).Evaluate();  // force evaluation since we really do need the results now
+
+            // get all of the open workbooks
+            var openWBNames = new HashSet<string>();
+            foreach (Excel.Workbook wb in app.Workbooks)
+            {
+                openWBNames.Add(wb.Name);
+            }
 
             // do all the side-effecting stuff (building the graph) last
             foreach (AddrExpansion ae in aes)
@@ -147,28 +176,32 @@ namespace Depends
 
                 foreach (AST.Range vector_rng in vectorRefs)
                 {
-                    // fetch/create COMRef, as appropriate
-                    this.makeInputVectorCOMRef(vector_rng, app);
+                        // fetch/create COMRef, as appropriate
+                        this.makeInputVectorCOMRef(vector_rng, app, openWBNames);
 
-                    // link formula and input vector
-                    this.linkInputVector(formula_addr, vector_rng);
+                        // link formula and input vector
+                        this.linkInputVector(formula_addr, vector_rng);
 
-                    // link input vector to the vector's single inputs
-                    foreach (AST.Address input_single in vector_rng.Addresses())
-                    {
-                        this.linkComponentInputCell(vector_rng, input_single);
-                    }
+                        // link input vector to the vector's single inputs
+                        foreach (AST.Address input_single in vector_rng.Addresses())
+                        {
+                            this.linkComponentInputCell(vector_rng, input_single);
+                        }
 
-                    // if num single inputs = num formulas,
-                    // mark vector as non-perturbable
-                    this.markPerturbability(vector_rng);
+                        // if num single inputs = num formulas,
+                        // mark vector as non-perturbable
+                        this.markPerturbability(vector_rng);
+                    
                 }
 
                 foreach (AST.Address input_addr in scalarRefs)
                 {
-                    this.linkSingleCellInput(formula_addr, input_addr);
+                        this.linkSingleCellInput(formula_addr, input_addr);
                 }
             }
+
+            
+            
         }
 
         // this is mostly for diagnostic purposes
@@ -267,7 +300,7 @@ namespace Depends
 
                     var addr = AST.Address.fromR1C1(r, c, wsname, wbname, path);
                     var formula = _formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(_formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
-                    var cr = new ParcelCOMShim.COMRef(wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
+                    var cr = new ParcelCOMShim.LocalCOMRef(wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
                     _all_cells.Add(addr, cr);
 
                     x_old = x;
@@ -314,27 +347,41 @@ namespace Depends
             return _formulas.Keys.ToArray();
         }
 
-        public ParcelCOMShim.COMRef makeInputVectorCOMRef(AST.Range rng, Excel.Application app)
+        public void makeInputVectorCOMRef(AST.Range rng, Excel.Application app, HashSet<string> openWBNames)
         {
             // check for the range in the dictionary
             ParcelCOMShim.COMRef c;
+
+            // if it's not in the dict, create it
             if (!_all_vectors.TryGetValue(rng, out c))
             {
-                // otherwise, create and cache it
-                Excel.Range com = ParcelCOMShim.Range.GetCOMObject(rng, app);
-                Excel.Worksheet ws = com.Worksheet;
-                Excel.Workbook wb = ws.Parent;
-                string wsname = ws.Name;
-                string wbname = wb.Name;
-                var path = wb.Path;
-                int width = com.Columns.Count;
-                int height = com.Rows.Count;
+                // is it a local reference?
+                if (NeedsWorkbookOpen(rng, openWBNames))
+                {
+                    // no
+                    string path = rng.GetPathName();
+                    string wbname = rng.GetWorkbookName();
+                    string wsname = rng.GetWorksheetName();
 
-                c = new ParcelCOMShim.COMRef(wb, ws, com, path, wbname, wsname, Microsoft.FSharp.Core.FSharpOption<string>.None, width, height);
+                    c = new ParcelCOMShim.NonLocalComRef(path, wbname, wsname, Microsoft.FSharp.Core.FSharpOption<string>.None);
+                } else
+                {
+                    // yes
+                    Excel.Range com = ParcelCOMShim.Range.GetCOMObject(rng, app);
+                    Excel.Worksheet ws = com.Worksheet;
+                    Excel.Workbook wb = ws.Parent;
+                    string wsname = ws.Name;
+                    string wbname = wb.Name;
+                    var path = wb.Path;
+                    int width = com.Columns.Count;
+                    int height = com.Rows.Count;
+                    c = new ParcelCOMShim.LocalCOMRef(wb, ws, com, path, wbname, wsname, Microsoft.FSharp.Core.FSharpOption<string>.None, width, height);
+                }
+
+                // cache it
                 _all_vectors.Add(rng, c);
                 _do_not_perturb.Add(rng, true);    // initially mark as not perturbable
             }
-            return c;
         }
 
         public void linkInputVector(AST.Address formula_addr, AST.Range vector_rng)
