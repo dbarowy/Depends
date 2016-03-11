@@ -51,6 +51,7 @@
     <Compile Include="BiDictionary.cs" />
     <Compile Include="DAG.cs" />
     <Compile Include="LINQExtension.cs" />
+    <Compile Include="Progress.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

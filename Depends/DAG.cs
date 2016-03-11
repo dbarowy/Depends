@@ -23,6 +23,7 @@ namespace Depends
     [Serializable]
     public class DAG
     {
+        readonly long _updateInterval;
         private string _path;
         private string _wbname;
         private string[] _wsnames;
@@ -62,7 +63,7 @@ namespace Depends
             stream.Close();
         }
 
-        public static DAG DAGFromCache(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, string cacheDirPath)
+        public static DAG DAGFromCache(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
         {
             // get path
             var fileName = SerializationPath(cacheDirPath, wb.Name);
@@ -73,7 +74,7 @@ namespace Depends
                 return DeserializeFrom(fileName);
             } else
             {
-                var dag = new DAG(wb, app, ignore_parse_errors);
+                var dag = new DAG(wb, app, ignore_parse_errors, p);
                 dag.SerializeToDirectory(cacheDirPath);
                 return dag;
             }
@@ -101,7 +102,12 @@ namespace Depends
             return obj;
         }
 
-        public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors)
+        // for callers who do not need progress bars
+        public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }))
+        {
+        }
+
+        public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             // start stopwatch
             var sw = new System.Diagnostics.Stopwatch();
@@ -116,11 +122,15 @@ namespace Depends
                 _wsnames[i - 1] = wb.Worksheets[i].Name;
             }
 
-            // bulk read worksheets
-            fastFormulaRead(wb);
+            // bulk read worksheets & set progress total
+            p.Total = fastFormulaRead(wb);
+
+            // set update interval (must be set after p.Total,
+            // otherwise it is incorrect).
+            _updateInterval = p.UpdateEvery;
 
             // construct DAG
-            ConstructDAG(app, ignore_parse_errors);
+            ConstructDAG(app, ignore_parse_errors, p);
 
             // stop stopwatch
             sw.Stop();
@@ -148,16 +158,27 @@ namespace Depends
             return result;
         }
 
-        public void ConstructDAG(Excel.Application app, bool ignore_parse_errors)
+        public void ConstructDAG(Excel.Application app, bool ignore_parse_errors, Progress p)
         {
-            // run the parser in parallel
-            var aes = this.getAllFormulaAddrs().AsParallel().Select(formula_addr =>
+            // run the parser
+            // you can add AsParallel() before the Select but then the
+            // progress bar delegate does not work correctly.
+            // not blocking on the main thread for a long period of time
+            // also lets Excel know that this process is not dead.
+            var aes = this.getAllFormulaAddrs().Select((formula_addr, index) =>
             {
                 var cr = this.getCOMRefForAddress(formula_addr);
                 var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
                 var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
 
-                return new AddrExpansion(formula_addr, vs, ss);
+                var ae = new AddrExpansion(formula_addr, vs, ss);
+
+                if (index % _updateInterval == 0)
+                {
+                    p.IncrementCounter();
+                }
+
+                return ae;
             }).Evaluate();  // force evaluation since we really do need the results now
 
             // get all of the open workbooks
@@ -213,7 +234,8 @@ namespace Depends
             return all.Count();
         }
 
-        private void fastFormulaRead(Excel.Workbook wb)
+        // returns the total number of formulas
+        private long fastFormulaRead(Excel.Workbook wb)
         {
             // get names once
             var wbfullname = wb.FullName;
@@ -306,6 +328,8 @@ namespace Depends
                     x_old = x;
                 }
             }
+
+            return _formulas.Count;
         }
 
         public string readCOMValueAtAddress(AST.Address addr)
