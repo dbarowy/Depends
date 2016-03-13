@@ -27,9 +27,7 @@ namespace Depends
         private string _path;
         private string _wbname;
         private string[] _wsnames;
-        [NonSerialized]
         private CellRefDict _all_cells = new CellRefDict();                 // maps every cell (including formulas) to its COMRef
-        [NonSerialized]
         private VectorRefDict _all_vectors = new VectorRefDict();           // maps every vector to its COMRef
         private FormulaDict _formulas = new FormulaDict();                  // maps every formula to its formula expr
         private Formula2VectDict _f2v = new Formula2VectDict();             // maps every formula to its input vectors
@@ -52,14 +50,7 @@ namespace Depends
         {
             IFormatter formatter = new BinaryFormatter();
             Stream stream = new FileStream(SerializationPath(dirpath, _wbname), FileMode.Create, FileAccess.Write, FileShare.None);
-            try
-            {
-                formatter.Serialize(stream, this);
-            } catch (Exception e)
-            {
-                var message = e.Message;
-                System.Console.WriteLine(message);
-            }
+            formatter.Serialize(stream, this);
             stream.Close();
         }
 
@@ -71,7 +62,7 @@ namespace Depends
             // return DAG from cache path, otherwise build and serialize to cache path
             if (File.Exists(fileName))
             {
-                return DeserializeFrom(fileName);
+                return DeserializeFrom(fileName, app);
             } else
             {
                 var dag = new DAG(wb, app, ignore_parse_errors, p);
@@ -80,25 +71,41 @@ namespace Depends
             }
         }
 
-        private static void reconstituteCellRefs(DAG dag, Excel.Application app)
+        private static void reconstituteAddressRefs(DAG dag, Excel.Application app)
         {
-            var cellrefs = new KeyValuePair<AST.Address, ParcelCOMShim.COMRef>[dag._i2f.Count];
+            var allAddrs = dag.allCells();
 
-            foreach (AST.Address addr in dag._i2f.Keys)
+            for (int i = 0; i < allAddrs.Length; i++)
             {
-                Excel.Range cell = ParcelCOMShim.Address.GetCOMObject(addr, app);
+                AST.Address addr = allAddrs[i];
+                ParcelCOMShim.COMRef oldCR = dag._all_cells[addr];
+                ParcelCOMShim.COMRef newCR = oldCR.DeserializationCellFixup(addr, app);
+                dag._all_cells[addr] = newCR;
             }
-
-            // TODO
-            throw new NotImplementedException("come on, dude");
         }
 
-        public static DAG DeserializeFrom(string fileName)
+        private static void reconstituteRangeRefs(DAG dag, Excel.Application app)
+        {
+            var allVectors = dag.allVectors();
+
+            for (int i = 0; i < allVectors.Length; i++)
+            {
+                AST.Range rng = allVectors[i];
+                ParcelCOMShim.COMRef oldCR = dag._all_vectors[rng];
+                ParcelCOMShim.COMRef newCR = oldCR.DeserializationRangeFixup(rng, app);
+                dag._all_vectors[rng] = newCR;
+            }
+        }
+
+        public static DAG DeserializeFrom(string fileName, Excel.Application app)
         {
             IFormatter formatter = new BinaryFormatter();
             Stream stream = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read);
             DAG obj = (DAG)formatter.Deserialize(stream);
             stream.Close();
+            reconstituteAddressRefs(obj, app);
+            reconstituteRangeRefs(obj, app);
+
             return obj;
         }
 
