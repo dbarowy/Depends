@@ -110,7 +110,7 @@ namespace Depends
         }
 
         // for callers who do not need progress bars
-        public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }))
+        public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }, 1L))
         {
         }
 
@@ -130,7 +130,7 @@ namespace Depends
             }
 
             // bulk read worksheets & set progress total
-            p.Total = fastFormulaRead(wb);
+            p.TotalWorkUnits = fastFormulaRead(wb);
 
             // set update interval (must be set after p.Total,
             // otherwise it is incorrect).

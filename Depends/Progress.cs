@@ -9,13 +9,15 @@ namespace Depends
     {
         private long _total = 0;
         private ProgressBarIncrementer _progBarIncr;
+        private long _workMultiplier = 1;
 
-        public Progress(ProgressBarIncrementer progBarIncrement)
+        public Progress(ProgressBarIncrementer progBarIncrement, long workMultiplier)
         {
             _progBarIncr = progBarIncrement;
+            _workMultiplier = workMultiplier;
         }
 
-        public long Total
+        public long TotalWorkUnits
         {
             get { return _total; }
             set { _total = value; }
@@ -23,7 +25,7 @@ namespace Depends
 
         public long UpdateEvery
         {
-            get { return Math.Max(1L, _total / 100L); }
+            get { return Math.Max(1L, _total / 100L / _workMultiplier); }
         }
 
         public void IncrementCounter()
