@@ -54,13 +54,13 @@ namespace Depends
             stream.Close();
         }
 
-        public static DAG DAGFromCache(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
+        public static DAG DAGFromCache(Boolean forceDAGBuild, Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
         {
             // get path
             var fileName = SerializationPath(cacheDirPath, wb.Name);
 
             // return DAG from cache path, otherwise build and serialize to cache path
-            if (File.Exists(fileName))
+            if (!forceDAGBuild && File.Exists(fileName))
             {
                 return DeserializeFrom(fileName, app);
             } else
