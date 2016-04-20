@@ -168,25 +168,22 @@ namespace Depends
         public void ConstructDAG(Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             // run the parser
-            // you can add AsParallel() before the Select but then the
-            // progress bar delegate does not work correctly.
-            // not blocking on the main thread for a long period of time
-            // also lets Excel know that this process is not dead.
-            var aes = this.getAllFormulaAddrs().Select((formula_addr, index) =>
+            var frms = this.getAllFormulaAddrs();
+            var aes = new AddrExpansion[frms.Length];
+            for (int i = 0; i < frms.Length; i++)
             {
+                var formula_addr = frms[i];
                 var cr = this.getCOMRefForAddress(formula_addr);
                 var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
                 var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
 
-                var ae = new AddrExpansion(formula_addr, vs, ss);
+                aes[i] = new AddrExpansion(formula_addr, vs, ss);
 
-                if (index % _updateInterval == 0)
+                if (i % _updateInterval == 0)
                 {
                     p.IncrementCounter();
                 }
-
-                return ae;
-            }).Evaluate();  // force evaluation since we really do need the results now
+            }
 
             // get all of the open workbooks
             var openWBNames = new HashSet<string>();
@@ -279,7 +276,7 @@ namespace Depends
                     var f = (string)urng.Formula;
                     if (fn_filter.IsMatch(f))
                     {
-                        var addr = AST.Address.fromR1C1(top, left, wsname, wbname, path);
+                        var addr = AST.Address.fromR1C1withMode(top, left, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
                         _formulas.Add(addr, f);
                         _f2v.Add(addr, new HashSet<AST.Range>());
                         _f2i.Add(addr, new HashSet<AST.Address>());
@@ -300,7 +297,7 @@ namespace Depends
                             var f = (string)formulas[r, c];
                             if (fn_filter.IsMatch(f))
                             {
-                                var addr = AST.Address.fromR1C1(r + top - 1, c + left - 1, wsname, wbname, path);
+                                var addr = AST.Address.fromR1C1withMode(r + top - 1, c + left - 1, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
                                 _formulas.Add(addr, f);
                                 _f2v.Add(addr, new HashSet<AST.Range>());
                                 _f2i.Add(addr, new HashSet<AST.Address>());
@@ -327,7 +324,7 @@ namespace Depends
                     int c = x + left;
                     int r = y + top;
 
-                    var addr = AST.Address.fromR1C1(r, c, wsname, wbname, path);
+                    var addr = AST.Address.fromR1C1withMode(r, c, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
                     var formula = _formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(_formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
                     var cr = new ParcelCOMShim.LocalCOMRef(wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
                     _all_cells.Add(addr, cr);
