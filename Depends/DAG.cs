@@ -23,6 +23,9 @@ namespace Depends
     [Serializable]
     public class DAG
     {
+        public static int THIS_VERSION = 1;
+        [OptionalField]
+        private int _version = THIS_VERSION;
         readonly long _updateInterval;
         private string _path;
         private string _wbname;
@@ -39,6 +42,12 @@ namespace Depends
         private Dictionary<AST.Range, bool> _do_not_perturb = new Dictionary<AST.Range, bool>();    // vector perturbability
         private Dictionary<AST.Address, int> _weights = new Dictionary<AST.Address, int>();         // graph node weight
         private readonly long _analysis_time;                               // amount of time to run dependence analysis
+
+        [OnDeserializing]
+        private void SetVersionDefault(StreamingContext sc)
+        {
+            _version = 0;
+        }
 
         private static string SerializationPath(string dirpath, string wbname)
         {
@@ -62,13 +71,25 @@ namespace Depends
             // return DAG from cache path, otherwise build and serialize to cache path
             if (!forceDAGBuild && File.Exists(fileName))
             {
-                return DeserializeFrom(fileName, app);
+                var dag = DeserializeFrom(fileName, app);
+
+                if (dag._version != THIS_VERSION)
+                {
+                    dag = newDAG(wb, app, ignore_parse_errors, cacheDirPath, p);
+                }
+
+                return dag;
             } else
             {
-                var dag = new DAG(wb, app, ignore_parse_errors, p);
-                dag.SerializeToDirectory(cacheDirPath);
-                return dag;
+                return newDAG(wb, app, ignore_parse_errors, cacheDirPath, p);
             }
+        }
+
+        private static DAG newDAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
+        {
+            var dag = new DAG(wb, app, ignore_parse_errors, p);
+            dag.SerializeToDirectory(cacheDirPath);
+            return dag;
         }
 
         private static void reconstituteAddressRefs(DAG dag, Excel.Application app)
