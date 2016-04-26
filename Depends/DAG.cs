@@ -42,6 +42,8 @@ namespace Depends
         private Dictionary<AST.Range, bool> _do_not_perturb = new Dictionary<AST.Range, bool>();    // vector perturbability
         private Dictionary<AST.Address, int> _weights = new Dictionary<AST.Address, int>();         // graph node weight
         private readonly long _analysis_time;                               // amount of time to run dependence analysis
+        private Tuple<string, string, string>[] _path_closure;              // the set of paths referenced by formulas in this DAG
+        private Dictionary<Tuple<string, string, string>, int> _path_closure_index; // the index of a path in the ordered array of closed-over paths
 
         [OnDeserializing]
         private void SetVersionDefault(StreamingContext sc)
@@ -809,6 +811,63 @@ namespace Depends
         public string[] getWorksheetNames()
         {
             return _wsnames;
+        }
+
+        // returns the set of all paths (directory, workbook, worksheet)
+        // referenced by all formulas in this DAG, lexicographically ordered.
+        // we evaluate this lazily since it is not always needed
+        public Tuple<string,string,string>[] getPathClosure()
+        {
+            if (_path_closure == null)
+            {
+                var paths = new HashSet<Tuple<string, string, string>>();
+
+                // single-cell references
+                foreach (HashSet<AST.Address> cells in _f2i.Values)
+                {
+                    foreach (AST.Address cell in cells)
+                    {
+                        var dir = cell.Path;
+                        var wbname = cell.WorkbookName;
+                        var wsname = cell.WorksheetName;
+                        paths.Add(new Tuple<string, string, string>(dir, wbname, wsname));
+                    }
+                }
+
+                // vector references
+                foreach (HashSet<AST.Range> ranges in _f2v.Values)
+                {
+                    foreach (AST.Range range in ranges)
+                    {
+                        var dir = range.GetPathName();
+                        var wbname = range.GetWorkbookName();
+                        var wsname = range.GetWorksheetName();
+                        paths.Add(new Tuple<string, string, string>(dir, wbname, wsname));
+                    }
+                }
+
+                _path_closure = paths.OrderBy(key => key.Item1 + key.Item2 + key.Item3).ToArray();
+            }
+
+            return _path_closure;
+        }
+
+        public int getPathClosureIndex(Tuple<string,string,string> path)
+        {
+            if (_path_closure_index == null)
+            {
+                var pci = new Dictionary<Tuple<string, string, string>,int>();
+                var pc = getPathClosure();
+
+                for (int i = 0; i < pc.Length; i++)
+                {
+                    pci.Add(pc[i], i);
+                }
+
+                _path_closure_index = pci;
+            }
+
+            return _path_closure_index[path];
         }
     }
 }
