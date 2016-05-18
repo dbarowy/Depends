@@ -14,6 +14,8 @@ using InputCell2VectDict = System.Collections.Generic.Dictionary<AST.Address, Sy
 using Formula2InputCellDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Address>>;
 using InputCell2FormulaDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Address>>;
 using AddrExpansion = System.Tuple<AST.Address, AST.Range[], AST.Address[]>;
+using PathTuple = System.Tuple<string, string, string>;
+using PathIndexDict = System.Collections.Generic.Dictionary<System.Tuple<string, string, string>, int>;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 using System.IO;
@@ -26,7 +28,7 @@ namespace Depends
         public static int THIS_VERSION = 1;
         [OptionalField]
         private int _version = THIS_VERSION;
-        readonly long _updateInterval;
+        private readonly long _updateInterval;
         private string _path;
         private string _wbname;
         private string[] _wsnames;
@@ -42,19 +44,31 @@ namespace Depends
         private Dictionary<AST.Range, bool> _do_not_perturb = new Dictionary<AST.Range, bool>();    // vector perturbability
         private Dictionary<AST.Address, int> _weights = new Dictionary<AST.Address, int>();         // graph node weight
         private readonly long _analysis_time;                               // amount of time to run dependence analysis
-        private Tuple<string, string, string>[] _path_closure;              // the set of paths referenced by formulas in this DAG
-        private Dictionary<Tuple<string, string, string>, int> _path_closure_index; // the index of a path in the ordered array of closed-over paths
+        private PathTuple[] _path_closure;                                  // the set of paths referenced by formulas in this DAG
+        private PathIndexDict _path_closure_index;                          // the index of a path in the ordered array of closed-over paths
 
         [OnDeserializing]
         private void SetVersionDefault(StreamingContext sc)
         {
-            _version = 0;
+            _version = 1;
         }
 
         private static string SerializationPath(string dirpath, string wbname)
         {
             string[] paths = { dirpath, "EXCELINT_" + wbname + ".bin" };
             return Path.Combine(paths);
+        }
+
+        public DAG CopyWithUpdatedFormulas(KeyValuePair<AST.Address,string>[] formulas)
+        {
+            var dag2 = new DAG(this);
+
+            foreach (var kvp in formulas)
+            {
+                dag2._formulas[kvp.Key] = kvp.Value;
+            }
+
+            return dag2;
         }
 
         public void SerializeToDirectory(string dirpath)
@@ -133,9 +147,7 @@ namespace Depends
         }
 
         // for callers who do not need progress bars
-        public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }, 1L))
-        {
-        }
+        public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }, 1L)) { }
 
         public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, Progress p)
         {
@@ -165,6 +177,28 @@ namespace Depends
             // stop stopwatch
             sw.Stop();
             _analysis_time = sw.ElapsedMilliseconds;
+        }
+
+        // copy constructor
+        public DAG(DAG dag)
+        {
+            _path = dag._path;
+            _wbname = dag._wbname;
+            _wsnames = dag._wsnames;
+            _all_cells = new CellRefDict(dag._all_cells);
+            _all_vectors = new VectorRefDict(dag._all_vectors);
+            _formulas = new FormulaDict(dag._formulas);
+            _f2v = new Formula2VectDict(dag._f2v);
+            _v2f = new Vect2FormulaDict(dag._v2f);
+            _f2i = new Formula2InputCellDict(dag._f2i);
+            _v2i = new Vect2FormulaDict(dag._v2i);
+            _i2v = new Formula2VectDict(dag._i2v);
+            _i2f = new Formula2InputCellDict(dag._i2f);
+            _do_not_perturb = new Dictionary<AST.Range, bool>(dag._do_not_perturb);
+            _weights = new Dictionary<AST.Address, int>(dag._weights);
+            _analysis_time = 0L;
+            _path_closure = (Tuple<string,string,string>[])dag._path_closure.Clone();
+            _path_closure_index = new PathIndexDict(dag._path_closure_index);
         }
 
         private Boolean NeedsWorkbookOpen(AST.Range r, HashSet<string> openWBNames)
@@ -819,7 +853,7 @@ namespace Depends
         }
 
         // returns the set of all paths (directory, workbook, worksheet)
-        // referenced by all formulas in this DAG, lexicographically ordered.
+        // referenced by any formula in this DAG, lexicographically ordered.
         // we evaluate this lazily since it is not always needed
         public Tuple<string,string,string>[] getPathClosure()
         {

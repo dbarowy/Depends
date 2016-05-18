@@ -11,6 +11,14 @@ namespace Depends
         Dictionary<T, U> _dict1 = new Dictionary<T, U>();
         Dictionary<U, T> _dict2 = new Dictionary<U, T>();
 
+        public BiDictionary() { }
+
+        public BiDictionary(BiDictionary<T,U> bidict)
+        {
+            _dict1 = new Dictionary<T, U>(bidict._dict1);
+            _dict2 = new Dictionary<U, T>(bidict._dict2);
+        }
+
         public void Add(T v1, U v2)
         {
             _dict1.Add(v1, v2);
