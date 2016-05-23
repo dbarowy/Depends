@@ -197,8 +197,6 @@ namespace Depends
             _do_not_perturb = new Dictionary<AST.Range, bool>(dag._do_not_perturb);
             _weights = new Dictionary<AST.Address, int>(dag._weights);
             _analysis_time = 0L;
-            _path_closure = (Tuple<string,string,string>[])dag._path_closure.Clone();
-            _path_closure_index = new PathIndexDict(dag._path_closure_index);
         }
 
         private Boolean NeedsWorkbookOpen(AST.Range r, HashSet<string> openWBNames)
