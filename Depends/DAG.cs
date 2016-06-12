@@ -188,6 +188,11 @@ namespace Depends
             return result;
         }
 
+        public AST.Expression getASTofFormulaAt(AST.Address addr)
+        {
+            return Parcel.parseFormulaAtAddress(addr, this.getFormulaAtAddress(addr));
+        }
+
         public void ConstructDAG(Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             // run the parser
