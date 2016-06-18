@@ -11,6 +11,12 @@ namespace Depends
         private ProgressBarIncrementer _progBarIncr;
         private long _workMultiplier = 1;
 
+        public static Progress NOPProgress()
+        {
+            ProgressBarIncrementer pbi = () => { return; };
+            return new Progress(pbi, 1L);
+        }
+
         public Progress(ProgressBarIncrementer progBarIncrement, long workMultiplier)
         {
             _progBarIncr = progBarIncrement;

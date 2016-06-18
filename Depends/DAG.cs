@@ -59,7 +59,7 @@ namespace Depends
             return Path.Combine(paths);
         }
 
-        public DAG CopyWithUpdatedFormulas(KeyValuePair<AST.Address,string>[] formulas)
+        public DAG CopyWithUpdatedFormulas(KeyValuePair<AST.Address,string>[] formulas, Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             var dag2 = new DAG(this);
 
@@ -67,6 +67,27 @@ namespace Depends
             {
                 dag2._formulas[kvp.Key] = kvp.Value;
             }
+
+            // clear graph
+            _all_vectors.Clear();
+            _do_not_perturb.Clear();
+            _f2v.Clear();
+            _v2f.Clear();
+            _i2v.Clear();
+            _v2i.Clear();
+            _i2f.Clear();
+            _f2i.Clear();
+
+            // reinitialize address hashsets
+            foreach (var kvp in formulas)
+            {
+                var addr = kvp.Key;
+                _f2v.Add(addr, new HashSet<AST.Range>());
+                _f2i.Add(addr, new HashSet<AST.Address>());
+            }
+
+            // parse formulas and rebuild graph
+            dag2.ConstructDAG(app, ignore_parse_errors, p);
 
             return dag2;
         }
