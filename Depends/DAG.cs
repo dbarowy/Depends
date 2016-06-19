@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using Excel = Microsoft.Office.Interop.Excel;
 using CellRefDict = Depends.BiDictionary<AST.Address, ParcelCOMShim.COMRef>;
 using VectorRefDict = Depends.BiDictionary<AST.Range, ParcelCOMShim.COMRef>;
 using FormulaDict = System.Collections.Generic.Dictionary<AST.Address, string>;
@@ -59,7 +58,7 @@ namespace Depends
             return Path.Combine(paths);
         }
 
-        public DAG CopyWithUpdatedFormulas(KeyValuePair<AST.Address,string>[] formulas, Excel.Application app, bool ignore_parse_errors, Progress p)
+        public DAG CopyWithUpdatedFormulas(KeyValuePair<AST.Address,string>[] formulas, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             var dag2 = new DAG(this);
 
@@ -100,7 +99,7 @@ namespace Depends
             stream.Close();
         }
 
-        public static DAG DAGFromCache(Boolean forceDAGBuild, Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
+        public static DAG DAGFromCache(Boolean forceDAGBuild, Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
         {
             // get path
             var fileName = SerializationPath(cacheDirPath, wb.Name);
@@ -122,14 +121,14 @@ namespace Depends
             }
         }
 
-        private static DAG newDAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
+        private static DAG newDAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
         {
             var dag = new DAG(wb, app, ignore_parse_errors, p);
             dag.SerializeToDirectory(cacheDirPath);
             return dag;
         }
 
-        private static void reconstituteAddressRefs(DAG dag, Excel.Application app)
+        private static void reconstituteAddressRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app)
         {
             var allAddrs = dag.allCells();
 
@@ -142,7 +141,7 @@ namespace Depends
             }
         }
 
-        private static void reconstituteRangeRefs(DAG dag, Excel.Application app)
+        private static void reconstituteRangeRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app)
         {
             var allVectors = dag.allVectors();
 
@@ -155,7 +154,7 @@ namespace Depends
             }
         }
 
-        public static DAG DeserializeFrom(string fileName, Excel.Application app)
+        public static DAG DeserializeFrom(string fileName, Microsoft.Office.Interop.Excel.Application app)
         {
             IFormatter formatter = new BinaryFormatter();
             Stream stream = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -168,9 +167,9 @@ namespace Depends
         }
 
         // for callers who do not need progress bars
-        public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }, 1L)) { }
+        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }, 1L)) { }
 
-        public DAG(Excel.Workbook wb, Excel.Application app, bool ignore_parse_errors, Progress p)
+        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             // start stopwatch
             var sw = new System.Diagnostics.Stopwatch();
@@ -246,7 +245,7 @@ namespace Depends
             return Parcel.parseFormulaAtAddress(addr, this.getFormulaAtAddress(addr));
         }
 
-        public void ConstructDAG(Excel.Application app, bool ignore_parse_errors, Progress p)
+        public void ConstructDAG(Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             // run the parser
             var frms = this.getAllFormulaAddrs();
@@ -268,7 +267,7 @@ namespace Depends
 
             // get all of the open workbooks
             var openWBNames = new HashSet<string>();
-            foreach (Excel.Workbook wb in app.Workbooks)
+            foreach (Microsoft.Office.Interop.Excel.Workbook wb in app.Workbooks)
             {
                 openWBNames.Add(wb.Name);
             }
@@ -320,7 +319,7 @@ namespace Depends
         }
 
         // returns the total number of formulas
-        private long fastFormulaRead(Excel.Workbook wb)
+        private long fastFormulaRead(Microsoft.Office.Interop.Excel.Workbook wb)
         {
             // get names once
             var wbfullname = wb.FullName;
@@ -333,10 +332,10 @@ namespace Depends
             // init formula validator
             var fn_filter = new Regex("^=", RegexOptions.Compiled);
 
-            foreach (Excel.Worksheet worksheet in wb.Worksheets)
+            foreach (Microsoft.Office.Interop.Excel.Worksheet worksheet in wb.Worksheets)
             {
                 // get used range
-                Excel.Range urng = worksheet.UsedRange;
+                Microsoft.Office.Interop.Excel.Range urng = worksheet.UsedRange;
 
                 // get dimensions
                 var left = urng.Column;                      // 1-based left-hand y coordinate
@@ -392,7 +391,7 @@ namespace Depends
                 int x_old = -1;
                 int x = -1;
                 int y = 0;
-                foreach (Excel.Range cell in urng)
+                foreach (Microsoft.Office.Interop.Excel.Range cell in urng)
                 {
                     // The basic idea here is that we know how Excel iterates over collections
                     // of cells.  The Excel.Range returned by UsedRange is always rectangular.
@@ -456,7 +455,7 @@ namespace Depends
             return _formulas.Keys.ToArray();
         }
 
-        public void makeInputVectorCOMRef(AST.Range rng, Excel.Application app, HashSet<string> openWBNames)
+        public void makeInputVectorCOMRef(AST.Range rng, Microsoft.Office.Interop.Excel.Application app, HashSet<string> openWBNames)
         {
             // check for the range in the dictionary
             ParcelCOMShim.COMRef c;
@@ -476,9 +475,9 @@ namespace Depends
                 } else
                 {
                     // yes
-                    Excel.Range com = ParcelCOMShim.Range.GetCOMObject(rng, app);
-                    Excel.Worksheet ws = com.Worksheet;
-                    Excel.Workbook wb = ws.Parent;
+                    Microsoft.Office.Interop.Excel.Range com = ParcelCOMShim.Range.GetCOMObject(rng, app);
+                    Microsoft.Office.Interop.Excel.Worksheet ws = com.Worksheet;
+                    Microsoft.Office.Interop.Excel.Workbook wb = ws.Parent;
                     string wsname = ws.Name;
                     string wbname = wb.Name;
                     var path = wb.Path;
