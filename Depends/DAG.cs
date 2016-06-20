@@ -24,7 +24,7 @@ namespace Depends
     [Serializable]
     public class DAG
     {
-        public static int THIS_VERSION = 1;
+        public static int THIS_VERSION = 2;
         [OptionalField]
         private int _version = THIS_VERSION;
         private readonly long _updateInterval;
@@ -54,7 +54,7 @@ namespace Depends
 
         private static string SerializationPath(string dirpath, string wbname)
         {
-            string[] paths = { dirpath, "EXCELINT_" + wbname + ".bin" };
+            string[] paths = { dirpath, "EXCELINT_" + wbname + "." + THIS_VERSION + ".bin" };
             return Path.Combine(paths);
         }
 
