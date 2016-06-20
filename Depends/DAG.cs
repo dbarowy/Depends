@@ -18,6 +18,7 @@ using PathIndexDict = System.Collections.Generic.Dictionary<System.Tuple<string,
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 using System.IO;
+using System.Runtime.CompilerServices;
 
 namespace Depends
 {
@@ -62,31 +63,67 @@ namespace Depends
         {
             var dag2 = new DAG(this);
 
-            foreach (var kvp in formulas)
+            // clear graph
+            dag2._all_vectors.Clear();
+            dag2._do_not_perturb.Clear();
+            dag2._f2v.Clear();
+            dag2._v2f.Clear();
+            dag2._i2v.Clear();
+            dag2._v2i.Clear();
+            dag2._i2f.Clear();
+            dag2._f2i.Clear();
+
+            // get all of the open workbooks & worksheets
+            var openWBNames = new Dictionary<string, Microsoft.Office.Interop.Excel.Workbook>();
+            var openWSNames = new Dictionary<Tuple<string,string>, Microsoft.Office.Interop.Excel.Worksheet>();
+            foreach (Microsoft.Office.Interop.Excel.Workbook wb in app.Workbooks)
             {
-                dag2._formulas[kvp.Key] = kvp.Value;
+                openWBNames.Add(wb.Name, wb);
+                foreach (Microsoft.Office.Interop.Excel.Worksheet ws in wb.Worksheets)
+                {
+                    openWSNames.Add(new Tuple<string,string>(wb.Name, ws.Name), ws);
+                }
             }
 
-            // clear graph
-            _all_vectors.Clear();
-            _do_not_perturb.Clear();
-            _f2v.Clear();
-            _v2f.Clear();
-            _i2v.Clear();
-            _v2i.Clear();
-            _i2f.Clear();
-            _f2i.Clear();
-
-            // reinitialize address hashsets
-            foreach (var kvp in formulas)
+            // 
+            foreach (var newfrm in formulas)
             {
-                var addr = kvp.Key;
-                _f2v.Add(addr, new HashSet<AST.Range>());
-                _f2i.Add(addr, new HashSet<AST.Address>());
+                var addr = newfrm.Key;
+                var x = addr.Col;
+                var y = addr.Row;
+                var wb = openWBNames[addr.WorkbookName];
+                var ws = openWSNames[new Tuple<string, string>(addr.WorkbookName, addr.WorksheetName)];
+                var cell = (Microsoft.Office.Interop.Excel.Range)app.Cells[x, y];
+
+                // update DAG formula string
+                dag2._formulas[addr] = newfrm.Value;
+
+                // make a new COMRef
+                var kvp2 = makeCOMRef(
+                    y,
+                    x,
+                    addr.WorksheetName,
+                    addr.WorkbookName,
+                    addr.Path,
+                    wb,
+                    ws,
+                    cell,
+                    dag2._formulas);
+
+                // debug
+                var old_cr = _all_cells[addr];
+                var new_cr = kvp2.Value;
+
+                // add formula COMRef to cells
+                dag2._all_cells[addr] = new_cr;
+
+                // reinitialize references
+                dag2._f2v.Add(addr, new HashSet<AST.Range>());
+                dag2._f2i.Add(addr, new HashSet<AST.Address>());
             }
 
             // parse formulas and rebuild graph
-            dag2.ConstructDAG(app, ignore_parse_errors, p);
+            ConstructDAG(app, dag2, ignore_parse_errors, p);
 
             return dag2;
         }
@@ -192,7 +229,7 @@ namespace Depends
             _updateInterval = p.UpdateEvery;
 
             // construct DAG
-            ConstructDAG(app, ignore_parse_errors, p);
+            ConstructDAG(app, this, ignore_parse_errors, p);
 
             // stop stopwatch
             sw.Stop();
@@ -246,21 +283,21 @@ namespace Depends
             return Parcel.parseFormulaAtAddress(addr, this.getFormulaAtAddress(addr));
         }
 
-        public void ConstructDAG(Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
+        public static void ConstructDAG(Microsoft.Office.Interop.Excel.Application app, DAG dag, bool ignore_parse_errors, Progress p)
         {
             // run the parser
-            var frms = this.getAllFormulaAddrs();
+            var frms = dag.getAllFormulaAddrs();
             var aes = new AddrExpansion[frms.Length];
             for (int i = 0; i < frms.Length; i++)
             {
                 var formula_addr = frms[i];
-                var cr = this.getCOMRefForAddress(formula_addr);
+                var cr = dag.getCOMRefForAddress(formula_addr);
                 var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
                 var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
 
                 aes[i] = new AddrExpansion(formula_addr, vs, ss);
 
-                if (i % _updateInterval == 0)
+                if (i % dag._updateInterval == 0)
                 {
                     p.IncrementCounter();
                 }
@@ -282,32 +319,29 @@ namespace Depends
 
                 foreach (AST.Range vector_rng in vectorRefs)
                 {
-                        // fetch/create COMRef, as appropriate
-                        this.makeInputVectorCOMRef(vector_rng, app, openWBNames);
+                    // fetch/create COMRef, as appropriate
+                    dag.makeInputVectorCOMRef(vector_rng, app, openWBNames);
 
-                        // link formula and input vector
-                        this.linkInputVector(formula_addr, vector_rng);
+                    // link formula and input vector
+                    dag.linkInputVector(formula_addr, vector_rng);
 
-                        // link input vector to the vector's single inputs
-                        foreach (AST.Address input_single in vector_rng.Addresses())
-                        {
-                            this.linkComponentInputCell(vector_rng, input_single);
-                        }
+                    // link input vector to the vector's single inputs
+                    foreach (AST.Address input_single in vector_rng.Addresses())
+                    {
+                        dag.linkComponentInputCell(vector_rng, input_single);
+                    }
 
-                        // if num single inputs = num formulas,
-                        // mark vector as non-perturbable
-                        this.markPerturbability(vector_rng);
+                    // if num single inputs = num formulas,
+                    // mark vector as non-perturbable
+                    dag.markPerturbability(vector_rng);
                     
                 }
 
                 foreach (AST.Address input_addr in scalarRefs)
                 {
-                        this.linkSingleCellInput(formula_addr, input_addr);
+                    dag.linkSingleCellInput(formula_addr, input_addr);
                 }
             }
-
-            
-            
         }
 
         // this is mostly for diagnostic purposes
@@ -405,16 +439,28 @@ namespace Depends
                     int c = x + left;
                     int r = y + top;
 
-                    var addr = AST.Address.fromR1C1withMode(r, c, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
-                    var formula = _formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(_formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
-                    var cr = new ParcelCOMShim.LocalCOMRef(wb, worksheet, cell, path, wbname, wsname, formula, 1, 1);
-                    _all_cells.Add(addr, cr);
+                    var kvp = makeCOMRef(r, c, wsname, wbname, path, wb, worksheet, cell, _formulas);
+                    
+                    _all_cells.Add(kvp.Key, kvp.Value);
 
                     x_old = x;
                 }
             }
 
             return _formulas.Count;
+        }
+
+        // This seriously ugly method exists because we need to call it from several places,
+        // one of which is very hot.  Computing many of these parameters from COM objects
+        // is expensive, so we expand them into the parameter list.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static KeyValuePair<AST.Address, ParcelCOMShim.LocalCOMRef> makeCOMRef(int r, int c, string wsname, string wbname, string path, Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Worksheet ws, Microsoft.Office.Interop.Excel.Range cell, Dictionary<AST.Address, string> formulas)
+        {
+            var addr = AST.Address.fromR1C1withMode(r, c, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
+            var formula = formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
+            var cr = new ParcelCOMShim.LocalCOMRef(wb, ws, cell, path, wbname, wsname, formula, 1, 1);
+
+            return new KeyValuePair<AST.Address, ParcelCOMShim.LocalCOMRef>(addr, cr);
         }
 
         public string readCOMValueAtAddress(AST.Address addr)
