@@ -217,6 +217,7 @@ namespace Depends
             _do_not_perturb = new Dictionary<AST.Range, bool>(dag._do_not_perturb);
             _weights = new Dictionary<AST.Address, int>(dag._weights);
             _analysis_time = 0L;
+            _updateInterval = dag._updateInterval;
         }
 
         private Boolean NeedsWorkbookOpen(AST.Range r, HashSet<string> openWBNames)
