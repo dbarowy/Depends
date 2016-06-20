@@ -36,7 +36,7 @@ namespace COMWrapper
         public string WorksheetName(int index)
         {
             // worksheets are 1-indexed
-            Microsoft.Office.Interop.Excel.Worksheet ws = _wb.Worksheets[index];
+            Excel.Worksheet ws = (Microsoft.Office.Interop.Excel.Worksheet)_wb.Worksheets[index];
             var name = ws.Name;
             Marshal.ReleaseComObject(ws);
             return name;

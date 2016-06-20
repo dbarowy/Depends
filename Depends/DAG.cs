@@ -181,7 +181,7 @@ namespace Depends
             _wsnames = new string[wb.Worksheets.Count];
             for (int i = 1; i <= wb.Worksheets.Count; i++)
             {
-                _wsnames[i - 1] = wb.Worksheets[i].Name;
+                _wsnames[i - 1] = ((Microsoft.Office.Interop.Excel.Worksheet)wb.Worksheets[i]).Name;
             }
 
             // bulk read worksheets & set progress total
@@ -366,7 +366,7 @@ namespace Depends
                 {
                     // array read of formula cells
                     // note that this is a 1-based 2D multiarray
-                    object[,] formulas = urng.Formula;
+                    object[,] formulas = (object[,])urng.Formula;
 
                     // for every cell that is actually a formula, add to 
                     // formula dictionary & init formula lookup dictionaries
@@ -477,7 +477,7 @@ namespace Depends
                     // yes
                     Microsoft.Office.Interop.Excel.Range com = ParcelCOMShim.Range.GetCOMObject(rng, app);
                     Microsoft.Office.Interop.Excel.Worksheet ws = com.Worksheet;
-                    Microsoft.Office.Interop.Excel.Workbook wb = ws.Parent;
+                    Microsoft.Office.Interop.Excel.Workbook wb = (Microsoft.Office.Interop.Excel.Workbook)ws.Parent;
                     string wsname = ws.Name;
                     string wbname = wb.Name;
                     var path = wb.Path;
