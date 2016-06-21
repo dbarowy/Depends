@@ -812,7 +812,7 @@ namespace Depends
                 .Select(pair => pair.Key).ToArray();
         }
 
-        public AST.Address[] allComputationCells()
+        public AST.Address[] allInputs()
         {
             // get all of the input ranges for all of the functions
             var inputs = _f2v.Values.SelectMany(rngs => rngs.SelectMany(rng => rng.Addresses())).Distinct();
@@ -822,6 +822,18 @@ namespace Depends
 
             // concat all together and return
             return inputs.Concat(scinputs).Distinct().ToArray();
+        }
+
+        public AST.Address[] allComputationCells()
+        {
+            // get all inputs
+            var inputs = allInputs();
+
+            // get all formulas
+            var formulas = getAllFormulaAddrs();
+
+            // concat all together and return
+            return inputs.Concat(formulas).Distinct().ToArray();
         }
 
         public AST.Address[] terminalInputCells()
