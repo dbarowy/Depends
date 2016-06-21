@@ -117,9 +117,18 @@ namespace Depends
                 // add formula COMRef to cells
                 dag2._all_cells[addr] = new_cr;
 
-                // reinitialize references
-                dag2._f2v.Add(addr, new HashSet<AST.Range>());
-                dag2._f2i.Add(addr, new HashSet<AST.Address>());
+                
+            }
+
+            foreach (var cell_cr in dag2._all_cells.KeysU)
+            {
+                if (cell_cr.IsFormula)
+                {
+                    // reinitialize references
+                    var addr = dag2._all_cells[cell_cr];
+                    dag2._f2v.Add(addr, new HashSet<AST.Range>());
+                    dag2._f2i.Add(addr, new HashSet<AST.Address>());
+                }
             }
 
             // parse formulas and rebuild graph
@@ -585,6 +594,7 @@ namespace Depends
             // add address to input_addr-lookup-by-formula_addr dictionary
             // (initialzied in DAG constructor)
             _f2i[formula_addr].Add(input_addr);
+            
             // add formula_addr to faddr-lookup-by-iaddr dictionary,
             // initializing bucket if necessary
             if (!_i2f.ContainsKey(input_addr))
