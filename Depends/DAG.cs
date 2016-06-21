@@ -85,7 +85,7 @@ namespace Depends
                 }
             }
 
-            // 
+            // replace old formulas with new ones
             foreach (var newfrm in formulas)
             {
                 var addr = newfrm.Key;
@@ -93,7 +93,7 @@ namespace Depends
                 var y = addr.Row;
                 var wb = openWBNames[addr.WorkbookName];
                 var ws = openWSNames[new Tuple<string, string>(addr.WorkbookName, addr.WorksheetName)];
-                var cell = (Microsoft.Office.Interop.Excel.Range)app.Cells[x, y];
+                var cell = this.getCOMRefForAddress(addr).Range;
 
                 // update DAG formula string
                 dag2._formulas[addr] = newfrm.Value;
@@ -110,14 +110,8 @@ namespace Depends
                     cell,
                     dag2._formulas);
 
-                // debug
-                var old_cr = _all_cells[addr];
-                var new_cr = kvp2.Value;
-
                 // add formula COMRef to cells
-                dag2._all_cells[addr] = new_cr;
-
-                
+                dag2._all_cells[addr] = kvp2.Value;
             }
 
             foreach (var cell_cr in dag2._all_cells.KeysU)
