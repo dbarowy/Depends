@@ -742,6 +742,14 @@ namespace Depends
             }
         }
 
+        /// <summary>
+        /// Returns all formula addresses that are not referenced
+        /// by any other formula, unless <paramref name="all_outputs"/>
+        /// is true, in which case all known formula addresses are
+        /// returned.
+        /// </summary>
+        /// <param name="all_outputs">If true, return all known formula addresses</param>
+        /// <returns></returns>
         public AST.Address[] terminalFormulaNodes(bool all_outputs)
         {
             // return only the formula nodes that do not serve
