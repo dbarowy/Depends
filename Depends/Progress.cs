@@ -7,6 +7,7 @@ namespace Depends
 
     public class Progress
     {
+        private bool _cancelled = false;
         private long _total = 0;
         private ProgressBarIncrementer _progBarIncr;
         private long _workMultiplier = 1;
@@ -37,6 +38,16 @@ namespace Depends
         public void IncrementCounter()
         {
             _progBarIncr();
+        }
+
+        public void Cancel()
+        {
+            _cancelled = true;
+        }
+
+        public bool IsCancelled()
+        {
+            return _cancelled;
         }
     }
 }
