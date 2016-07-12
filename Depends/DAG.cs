@@ -46,6 +46,7 @@ namespace Depends
         private readonly long _analysis_time;                               // amount of time to run dependence analysis
         private PathTuple[] _path_closure;                                  // the set of paths referenced by formulas in this DAG
         private PathIndexDict _path_closure_index;                          // the index of a path in the ordered array of closed-over paths
+        private bool _buildWasCancelled = false;                            // set true if DAG building/deserialization was cancelled
 
         [OnDeserializing]
         private void SetVersionDefault(StreamingContext sc)
@@ -147,10 +148,11 @@ namespace Depends
             // return DAG from cache path, otherwise build and serialize to cache path
             if (!forceDAGBuild && File.Exists(fileName))
             {
-                var dag = DeserializeFrom(fileName, app);
+                var dag = DeserializeFrom(fileName, app, p);
 
                 if (dag._version != THIS_VERSION)
                 {
+                    p.Reset();
                     dag = newDAG(wb, app, ignore_parse_errors, cacheDirPath, p);
                 }
 
@@ -168,7 +170,7 @@ namespace Depends
             return dag;
         }
 
-        private static void reconstituteAddressRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app)
+        private static void reconstituteAddressRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app, Progress p)
         {
             var allAddrs = dag.allCells();
 
@@ -178,10 +180,20 @@ namespace Depends
                 ParcelCOMShim.COMRef oldCR = dag._all_cells[addr];
                 ParcelCOMShim.COMRef newCR = oldCR.DeserializationCellFixup(addr, app);
                 dag._all_cells[addr] = newCR;
+
+                if (i % (dag._updateInterval * 2) == 0)
+                {
+                    if (p.IsCancelled())
+                    {
+                        dag._buildWasCancelled = true;
+                        return;
+                    }
+                    p.IncrementCounter();
+                }
             }
         }
 
-        private static void reconstituteRangeRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app)
+        private static void reconstituteRangeRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app, Progress p)
         {
             var allVectors = dag.allVectors();
 
@@ -191,23 +203,34 @@ namespace Depends
                 ParcelCOMShim.COMRef oldCR = dag._all_vectors[rng];
                 ParcelCOMShim.COMRef newCR = oldCR.DeserializationRangeFixup(rng, app);
                 dag._all_vectors[rng] = newCR;
+
+                if (i % (dag._updateInterval * 2) == 0)
+                {
+                    if (p.IsCancelled())
+                    {
+                        dag._buildWasCancelled = true;
+                        return;
+                    }
+                    p.IncrementCounter();
+                }
             }
         }
 
-        public static DAG DeserializeFrom(string fileName, Microsoft.Office.Interop.Excel.Application app)
+        public static DAG DeserializeFrom(string fileName, Microsoft.Office.Interop.Excel.Application app, Progress p)
         {
             IFormatter formatter = new BinaryFormatter();
             Stream stream = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read);
             DAG obj = (DAG)formatter.Deserialize(stream);
             stream.Close();
-            reconstituteAddressRefs(obj, app);
-            reconstituteRangeRefs(obj, app);
+
+            reconstituteAddressRefs(obj, app, p);
+            reconstituteRangeRefs(obj, app, p);
 
             return obj;
         }
 
         // for callers who do not need progress bars
-        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }, 1L)) { }
+        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }, () => { }, 1L)) { }
 
         public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
         {
@@ -302,6 +325,11 @@ namespace Depends
 
                 if (i % dag._updateInterval == 0)
                 {
+                    if (p.IsCancelled())
+                    {
+                        dag._buildWasCancelled = true;
+                        return;
+                    }
                     p.IncrementCounter();
                 }
             }
@@ -996,6 +1024,11 @@ namespace Depends
             }
 
             return _path_closure_index[path];
+        }
+
+        public bool IsCancelled()
+        {
+            return _buildWasCancelled;
         }
     }
 }
