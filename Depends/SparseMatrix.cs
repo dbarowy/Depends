@@ -80,12 +80,27 @@ namespace Depends
 
         public HashSet<int> Distances(AST.Address from, AST.Address to)
         {
-            return _matrix[from][to];
+            if (!_matrix.ContainsKey(from))
+            {
+                return new HashSet<int>();
+            } else if (!_matrix[from].ContainsKey(to))
+            {
+                return new HashSet<int>();
+            } else
+            {
+                return _matrix[from][to];
+            }
         }
 
         public Dictionary<AST.Address,HashSet<int>> AllRefDistances(AST.Address from)
         {
-            return _matrix[from];
+            if (!_matrix.ContainsKey(from))
+            {
+                return new Dictionary<AST.Address, HashSet<int>>();
+            } else
+            {
+                return _matrix[from];
+            }
         }
     }
 }
