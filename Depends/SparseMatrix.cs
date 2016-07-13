@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Depends
 {
+    [Serializable]
     public class SparseMatrix
     {
         // represents a uniform-cost directed graph
@@ -19,6 +17,26 @@ namespace Depends
         {
             _numVertices = numVertices;
             _matrix = new Dictionary<AST.Address, Dictionary<AST.Address, HashSet<int>>>(numVertices);
+        }
+
+        public SparseMatrix(SparseMatrix other)
+        {
+            _numVertices = other._numVertices;
+            foreach (var kvp in other._matrix)
+            {
+                var source = kvp.Key;
+                var dests = kvp.Value;
+                foreach (var dkvp in dests)
+                {
+                    var dest = dkvp.Key;
+                    var distances = dkvp.Value;
+
+                    foreach (var distance in distances)
+                    {
+                        this.Connect(source, dest, distance);
+                    }
+                }
+            }
         }
 
         public void Connect(AST.Address source, AST.Address destination, int distance)

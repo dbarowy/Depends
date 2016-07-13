@@ -287,6 +287,8 @@ namespace Depends
             _weights = new Dictionary<AST.Address, int>(dag._weights);
             _analysis_time = 0L;
             _updateInterval = dag._updateInterval;
+            _dist_f2i = new SparseMatrix(dag._dist_f2i);
+            _dist_i2f = new SparseMatrix(dag._dist_i2f);
         }
 
         private Boolean NeedsWorkbookOpen(AST.Range r, HashSet<string> openWBNames)
