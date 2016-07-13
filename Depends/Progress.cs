@@ -24,6 +24,7 @@ namespace Depends
         public Progress(ProgressBarIncrementer progBarIncrement, ProgressBarReset progBarReset, long workMultiplier)
         {
             _progBarIncr = progBarIncrement;
+            _progBarReset = progBarReset;
             _workMultiplier = workMultiplier;
         }
 
