@@ -34,5 +34,11 @@ namespace Tests
 
             Assert.AreEqual("=HLOOKUP(B1,G1:K2,2,FALSE)", frm_a1);
         }
+
+        [TestMethod]
+        public void levelComputation()
+        {
+
+        }
     }
 }
