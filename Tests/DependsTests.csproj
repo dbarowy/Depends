@@ -7,8 +7,8 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Tests</RootNamespace>
-    <AssemblyName>Tests</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <AssemblyName>DependsTests</AssemblyName>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{3AC096D0-A1C2-E12C-1390-A8335801FDAB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
@@ -26,6 +26,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -34,6 +35,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -62,10 +64,6 @@
     <ProjectReference Include="..\Depends\Depends.csproj">
       <Project>{34fa1bc2-cfd6-44ec-ac0c-dfc62313e4bf}</Project>
       <Name>Depends</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\ParcelCOMShim\ParcelCOMShim\ParcelCOMShim.fsproj">
-      <Project>{71e3af28-8088-4f9d-9392-858964d72947}</Project>
-      <Name>ParcelCOMShim</Name>
     </ProjectReference>
     <ProjectReference Include="..\parcel\Parcel\ExcelParser.fsproj">
       <Project>{6de2a2b9-c029-4bdb-8992-d16276471d9f}</Project>
