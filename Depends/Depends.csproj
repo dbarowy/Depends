@@ -54,6 +54,7 @@
     <Compile Include="LINQExtension.cs" />
     <Compile Include="Progress.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SparseMatrix.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ParcelCOMShim\ParcelCOMShim\ParcelCOMShim.fsproj">

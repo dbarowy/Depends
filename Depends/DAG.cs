@@ -25,7 +25,7 @@ namespace Depends
     [Serializable]
     public class DAG
     {
-        public static int THIS_VERSION = 2;
+        public static int THIS_VERSION = 3;
         [OptionalField]
         private int _version = THIS_VERSION;
         private readonly long _updateInterval;
@@ -47,6 +47,8 @@ namespace Depends
         private PathTuple[] _path_closure;                                  // the set of paths referenced by formulas in this DAG
         private PathIndexDict _path_closure_index;                          // the index of a path in the ordered array of closed-over paths
         private bool _buildWasCancelled = false;                            // set true if DAG building/deserialization was cancelled
+        private SparseMatrix _dist_f2i;                                     // distances of all simple paths from formulas to inputs
+        private SparseMatrix _dist_i2f;                                     // distances of all simple paths from inputs to formulas
 
         [OnDeserializing]
         private void SetVersionDefault(StreamingContext sc)
@@ -257,6 +259,10 @@ namespace Depends
             // construct DAG
             ConstructDAG(app, this, ignore_parse_errors, p);
 
+            // find all-pairs-all-simple-paths
+            _dist_f2i = AllSimplePaths(this, p);
+            _dist_i2f = _dist_f2i.Transpose();
+
             // stop stopwatch
             sw.Stop();
             _analysis_time = sw.ElapsedMilliseconds;
@@ -307,6 +313,44 @@ namespace Depends
         public AST.Expression getASTofFormulaAt(AST.Address addr)
         {
             return Parcel.parseFormulaAtAddress(addr, this.getFormulaAtAddress(addr));
+        }
+
+        /// <summary>
+        /// Finds all paths between all vertices in the DAG.  It is strongly advised
+        /// that you supply a DAG as input or be prepared to wait awhile for the
+        /// answer.
+        /// </summary>
+        /// <param name="dag">A directed acyclic graph.</param>
+        /// <param name="p">Progress object (not presently used)</param>
+        /// <returns></returns>
+        private static SparseMatrix AllSimplePaths(DAG dag, Progress p)
+        {
+            var m = new SparseMatrix(dag.allCells().Length);
+
+            Action<AST.Address, int> dfs = null;
+            dfs = (AST.Address start, int current_depth) =>
+            {
+                if (dag.isFormula(start))
+                {
+                    var single_cells = dag._f2i[start];
+                    var vector_cells = dag._f2v[start].SelectMany((v) => v.Addresses());
+                    var all = single_cells.Concat(vector_cells);
+
+                    foreach (var c in all)
+                    {
+                        var newdepth = current_depth + 1;
+                        m.Connect(start, c, newdepth);
+                        dfs(c, newdepth);
+                    }
+                }
+            };
+
+            foreach(var f in dag.terminalFormulaNodes(true))
+            {
+                dfs(f, 0);
+            }
+
+            return m;
         }
 
         public static void ConstructDAG(Microsoft.Office.Interop.Excel.Application app, DAG dag, bool ignore_parse_errors, Progress p)
@@ -877,25 +921,33 @@ namespace Depends
             return iecells.ToArray<AST.Address>();
         }
 
-        private IEnumerable<AST.Address> getChildCellsRec(AST.Address cell_addr)
+        /// <summary>
+        /// Gets all cells transitively referenced by the formula at cell_addr,
+        /// both those cells referenced by single-cell references and cells referenced
+        /// by vector references, including the formula itself.
+        /// </summary>
+        /// <param name="formula"></param>
+        /// <returns>A sequence of addresses.</returns>
+        private IEnumerable<AST.Address> getChildCellsRec(AST.Address formula)
         {
             // recursive case
-            if (_formulas.ContainsKey(cell_addr))
+            if (_formulas.ContainsKey(formula))
             {
                 // recursively get vector inputs
-                var vector_children = _f2v[cell_addr].SelectMany(rng => getVectorChildCellsRec(rng));
+                var vector_children = _f2v[formula].SelectMany(rng => getVectorChildCellsRec(rng));
 
                 // recursively get single-cell inputs
-                var sc_children = _f2i[cell_addr].SelectMany(cell => getChildCellsRec(cell));
+                var sc_children = _f2i[formula].SelectMany(cell => getChildCellsRec(cell));
 
                 return vector_children.Concat(sc_children);
                 // base case
             }
             else
             {
-                return new List<AST.Address> { cell_addr };
+                return new List<AST.Address> { formula };
             }
         }
+
 
         private IEnumerable<AST.Address> getVectorChildCellsRec(AST.Range vector_addr)
         {
@@ -1029,6 +1081,26 @@ namespace Depends
         public bool IsCancelled()
         {
             return _buildWasCancelled;
+        }
+
+        public HashSet<int> DistancesFromFormulaToInput(AST.Address faddr, AST.Address iaddr)
+        {
+            return _dist_f2i.Distances(faddr, iaddr);
+        }
+
+        public HashSet<int> DistancesFromInputToFormula(AST.Address iaddr, AST.Address faddr)
+        {
+            return _dist_i2f.Distances(iaddr, faddr);
+        }
+
+        public Dictionary<AST.Address,HashSet<int>> AllRefDistancesFromFormula(AST.Address faddr)
+        {
+            return _dist_f2i.AllRefDistances(faddr);
+        }
+
+        public Dictionary<AST.Address,HashSet<int>> AllRefDistancesFromInput(AST.Address iaddr)
+        {
+            return _dist_i2f.AllRefDistances(iaddr);
         }
     }
 }
