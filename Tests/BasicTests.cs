@@ -56,7 +56,8 @@ namespace Tests
                         var tbl = dag.AllRefDistancesFromInput(from);
                         HashSet<int> expected = new HashSet<int>(distances);
                         HashSet<int> actual = tbl.ContainsKey(to) ? tbl[to] : new HashSet<int>();
-                        return actual.SequenceEqual(expected);
+                        Func<int,int> identity = (int i) => i;
+                        return actual.OrderBy(identity).SequenceEqual(expected);
                     };
 
 
@@ -110,7 +111,7 @@ namespace Tests
             Assert.IsTrue(expectedDistances(h1, d1, h1_to_d1));
 
             // from I1
-            int[] i1_to_a1 = { 3 };
+            int[] i1_to_a1 = { 2, 3 };
             Assert.IsTrue(expectedDistances(i1, a1, i1_to_a1));
             int[] i1_to_c1 = { 2 };
             Assert.IsTrue(expectedDistances(i1, c1, i1_to_c1));
