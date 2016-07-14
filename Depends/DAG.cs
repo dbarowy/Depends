@@ -19,6 +19,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 using System.IO;
 using System.Runtime.CompilerServices;
+using AddrFunList = Microsoft.FSharp.Collections.FSharpList<AST.Address>;
 
 namespace Depends
 {
@@ -329,8 +330,8 @@ namespace Depends
         {
             var m = new SparseMatrix(dag.allCells().Length);
 
-            Action<AST.Address, int> dfs = null;
-            dfs = (AST.Address start, int current_depth) =>
+            Action<AST.Address, AddrFunList> dfs = null;
+            dfs = (AST.Address start, AddrFunList antecedents) =>
             {
                 if (dag.isFormula(start))
                 {
@@ -338,18 +339,25 @@ namespace Depends
                     var vector_cells = dag._f2v[start].SelectMany((v) => v.Addresses());
                     var all = single_cells.Concat(vector_cells);
 
+                    var antecedents2 = AddrFunList.Cons(start, antecedents);
+
                     foreach (var c in all)
                     {
-                        var newdepth = current_depth + 1;
-                        m.Connect(start, c, newdepth);
-                        dfs(c, newdepth);
+                        AST.Address[] ants = antecedents2.ToArray();
+
+                        for (int depth = 0; depth < ants.Length; depth++)
+                        {
+                            m.Connect(ants[depth], c, depth + 1);
+                        }
+                        
+                        dfs(c, antecedents2);
                     }
                 }
             };
 
             foreach(var f in dag.terminalFormulaNodes(true))
             {
-                dfs(f, 0);
+                dfs(f, AddrFunList.Empty);
             }
 
             return m;
