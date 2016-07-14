@@ -132,6 +132,10 @@ namespace Depends
             // parse formulas and rebuild graph
             ConstructDAG(app, dag2, ignore_parse_errors, p);
 
+            // re-find all-pairs-all-simple-paths
+            _dist_f2i = AllSimplePaths(this, p);
+            _dist_i2f = _dist_f2i.Transpose();
+
             return dag2;
         }
 
