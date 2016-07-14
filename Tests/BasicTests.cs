@@ -89,8 +89,10 @@ namespace Tests
             Assert.IsTrue(expectedDistances(d1, a1, d1_to_a1));
 
             // from E1
-            int[] e1_to_a1 = { 0 };
+            int[] e1_to_a1 = { };
             Assert.IsTrue(expectedDistances(e1, a1, e1_to_a1));
+            int[] e1_to_e1 = { 0 };
+            Assert.IsTrue(expectedDistances(e1, e1, e1_to_e1));
 
             // from F1
             int[] f1_to_a1 = { 2 };

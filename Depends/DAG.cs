@@ -339,22 +339,25 @@ namespace Depends
             {
                 if (dag.isFormula(start))
                 {
+                    // the distance between the start and itself is 0 by definition
+                    m.Connect(start, start, 0);
+
                     var single_cells = dag._f2i[start];
                     var vector_cells = dag._f2v[start].SelectMany((v) => v.Addresses());
                     var all = single_cells.Concat(vector_cells);
 
                     var antecedents2 = AddrFunList.Cons(start, antecedents);
 
-                    foreach (var c in all)
+                    foreach (var child in all)
                     {
                         AST.Address[] ants = antecedents2.ToArray();
 
                         for (int depth = 0; depth < ants.Length; depth++)
                         {
-                            m.Connect(ants[depth], c, depth + 1);
+                            m.Connect(ants[depth], child, depth + 1);
                         }
                         
-                        dfs(c, antecedents2);
+                        dfs(child, antecedents2);
                     }
                 }
             };
