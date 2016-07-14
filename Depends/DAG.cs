@@ -26,7 +26,7 @@ namespace Depends
     [Serializable]
     public class DAG
     {
-        public static int THIS_VERSION = 3;
+        public static int THIS_VERSION = 4;
         [OptionalField]
         private int _version = THIS_VERSION;
         private readonly long _updateInterval;
@@ -362,7 +362,7 @@ namespace Depends
                 }
             };
 
-            foreach(var f in dag.terminalFormulaNodes(true))
+            foreach (var f in dag.terminalFormulaNodes(true))
             {
                 dfs(f, AddrFunList.Empty);
             }
