@@ -73,7 +73,7 @@ namespace Tests
             var j1 = fastCell("J", 1);
 
             // from A1
-            int[] a1_to_a1 = { };
+            int[] a1_to_a1 = { 0 };
             Assert.IsTrue(expectedDistances(a1, a1, a1_to_a1));
 
             // from B1
@@ -89,7 +89,7 @@ namespace Tests
             Assert.IsTrue(expectedDistances(d1, a1, d1_to_a1));
 
             // from E1
-            int[] e1_to_a1 = { };
+            int[] e1_to_a1 = { 0 };
             Assert.IsTrue(expectedDistances(e1, a1, e1_to_a1));
 
             // from F1
