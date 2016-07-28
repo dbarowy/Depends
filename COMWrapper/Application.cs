@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Excel = Microsoft.Office.Interop.Excel;
+using System.Linq;
 
 namespace COMWrapper
 {
@@ -68,13 +69,25 @@ namespace COMWrapper
                                XlCorruptLoad.RepairFile);   // CorruptLoad (XlCorruptLoad enum)
 
             // init wrapped workbook
-            // TODO: the array index here really should depend on the number of open workbooks
-            var wb = new Workbook(_app.Workbooks[1], _app);
+            var wb_idx = _wbs.Count + 1; // Excel uses 1-based arrays
+            var wb = new Workbook(_app.Workbooks[wb_idx], _app);
 
             // add to list
             _wbs.Add(wb);
 
             return wb;
+        }
+
+        public void CloseWorkbookByName(String name)
+        {
+            var wb = _wbs.Find( (Workbook w) => w.WorkbookName == name);
+            CloseWorkbook(wb);
+        }
+
+        public void CloseWorkbook(Workbook wb)
+        {
+            wb.Dispose();
+            _wbs = _wbs.Where((Workbook w) => w != wb).ToList();
         }
 
         public void Dispose()

@@ -9,11 +9,13 @@ namespace COMWrapper
     {
         private Excel.Application _app;
         private Excel.Workbook _wb;
+        private String _wb_name;
 
         public Workbook(Excel.Workbook wb, Excel.Application app)
         {
             _app = app;
             _wb = wb;
+            _wb_name = wb.Name;
         }
 
         public void Dispose()
@@ -41,7 +43,6 @@ namespace COMWrapper
             Marshal.ReleaseComObject(ws);
             return name;
         }
-
 
         public string Path
         {
