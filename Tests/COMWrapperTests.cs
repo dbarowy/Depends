@@ -10,7 +10,7 @@ namespace ExceLintTests
         [TestMethod]
         public void WorkbookIndexTest()
         {
-            var path = "../../../../data/analyses/CUSTODES/custodes/example/input_spreadsheets";
+            var path = "../../../../../data/analyses/CUSTODES/custodes/example/input_spreadsheets";
             var wb1_name = "01-38-PK_tables-figures.xls";
             var wb2_name = "chartssection2.xls";
             var wb3_name = "gradef03-sec3.xls";
