@@ -90,6 +90,11 @@ namespace COMWrapper
             _wbs = _wbs.Where((Workbook w) => w != wb).ToList();
         }
 
+        public Excel.Application XLApplication()
+        {
+            return _app;
+        }
+
         public void Dispose()
         {
             foreach (var wb in _wbs)
