@@ -518,6 +518,13 @@ namespace Depends
                 int x_old = -1;
                 int x = -1;
                 int y = 0;
+
+                // array read of data cells
+                // note that this is a 1-based 2D multiarray
+                // we grab this in array form so that we can avoid a COM
+                // call for every blank-cell check
+                object[,] data = (object[,])urng.Value2;
+
                 foreach (Microsoft.Office.Interop.Excel.Range cell in urng)
                 {
                     // The basic idea here is that we know how Excel iterates over collections
@@ -531,9 +538,12 @@ namespace Depends
                     int c = x + left;
                     int r = y + top;
 
-                    var kvp = makeCOMRef(r, c, wsname, wbname, path, wb, worksheet, cell, _formulas);
-                    
-                    _all_cells.Add(kvp.Key, kvp.Value);
+                    // don't track if the cell contains nothing
+                    if (data[y + 1, x + 1] != null) // adjust indices to be one-based
+                    {
+                        var kvp = makeCOMRef(r, c, wsname, wbname, path, wb, worksheet, cell, _formulas);
+                        _all_cells.Add(kvp.Key, kvp.Value);
+                    }
 
                     x_old = x;
                 }
