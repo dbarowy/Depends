@@ -512,40 +512,43 @@ namespace Depends
                         }
                     }
                 }
-
-                // for each COM object in the used range, create an address object
-                // WITHOUT calling any methods on the COM object itself
-                int x_old = -1;
-                int x = -1;
-                int y = 0;
-
                 // array read of data cells
                 // note that this is a 1-based 2D multiarray
                 // we grab this in array form so that we can avoid a COM
                 // call for every blank-cell check
                 object[,] data = (object[,])urng.Value2;
 
-                foreach (Microsoft.Office.Interop.Excel.Range cell in urng)
+                // if the worksheet contains nothing, data will be null
+                if (data != null)
                 {
-                    // The basic idea here is that we know how Excel iterates over collections
-                    // of cells.  The Excel.Range returned by UsedRange is always rectangular.
-                    // Thus we can calculate the addresses of each COM cell reference without
-                    // needing to incur the overhead of actually asking it for its address.
-                    x = (x + 1) % width;
-                    // increment y if x wrapped (x < x_old or x == x_old when width == 1)
-                    y = x <= x_old ? y + 1 : y;
+                    // for each COM object in the used range, create an address object
+                    // WITHOUT calling any methods on the COM object itself
+                    int x_old = -1;
+                    int x = -1;
+                    int y = 0;
 
-                    int c = x + left;
-                    int r = y + top;
-
-                    // don't track if the cell contains nothing
-                    if (data[y + 1, x + 1] != null) // adjust indices to be one-based
+                    foreach (Microsoft.Office.Interop.Excel.Range cell in urng)
                     {
-                        var kvp = makeCOMRef(r, c, wsname, wbname, path, wb, worksheet, cell, _formulas);
-                        _all_cells.Add(kvp.Key, kvp.Value);
-                    }
+                        // The basic idea here is that we know how Excel iterates over collections
+                        // of cells.  The Excel.Range returned by UsedRange is always rectangular.
+                        // Thus we can calculate the addresses of each COM cell reference without
+                        // needing to incur the overhead of actually asking it for its address.
+                        x = (x + 1) % width;
+                        // increment y if x wrapped (x < x_old or x == x_old when width == 1)
+                        y = x <= x_old ? y + 1 : y;
 
-                    x_old = x;
+                        int c = x + left;
+                        int r = y + top;
+
+                        // don't track if the cell contains nothing
+                        if (data[y + 1, x + 1] != null) // adjust indices to be one-based
+                        {
+                            var kvp = makeCOMRef(r, c, wsname, wbname, path, wb, worksheet, cell, _formulas);
+                            _all_cells.Add(kvp.Key, kvp.Value);
+                        }
+
+                        x_old = x;
+                    }
                 }
             }
 

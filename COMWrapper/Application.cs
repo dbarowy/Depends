@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Excel = Microsoft.Office.Interop.Excel;
 using System.Linq;
+using Microsoft.Office.Core;
 
 namespace COMWrapper
 {
@@ -76,6 +77,41 @@ namespace COMWrapper
             _wbs.Add(wb);
 
             return wb;
+        }
+
+        /// <summary>
+        /// This method returns an IWorkbookState in order to
+        /// force an "in-process" analysis; in other words, the
+        /// analysis will run on Excel's thread.  The reason is
+        /// that we assume that callers are actually running in
+        /// a separate process.  While we are able to run ExceLint
+        /// in a separate process, the runtime callable wrapper (RCW)
+        /// cross-process marshaling overhead is extremely high (>40x).
+        /// Running the analysis on Excel's thread allows faster
+        /// access to Excel COM data.
+        /// </summary>
+        public ExceLintUI.IWorkbookState WorkbookState
+        {
+            get
+            {
+                object addInName = "ExceLintUI";
+                var addins = _app.COMAddIns;
+                COMAddIn[] addin_arr = new COMAddIn[addins.Count];
+                int i = 0;
+                foreach (COMAddIn c in addins)
+                {
+                    addin_arr[i] = c;
+                }
+
+                COMAddIn exceLintUI = addins.Item(ref addInName);
+
+                if (!exceLintUI.Connect)
+                {
+                    exceLintUI.Connect = true;
+                }
+
+                return (ExceLintUI.IWorkbookState)exceLintUI.Object;
+            }
         }
 
         public void CloseWorkbookByName(String name)
