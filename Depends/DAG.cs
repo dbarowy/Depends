@@ -527,7 +527,7 @@ namespace Depends
                     int x = -1;
                     int y = 0;
 
-                    foreach (Microsoft.Office.Interop.Excel.Range cell in urng)
+                    for (int i = 0; i < width * height; i++)
                     {
                         // The basic idea here is that we know how Excel iterates over collections
                         // of cells.  The Excel.Range returned by UsedRange is always rectangular.
@@ -543,6 +543,7 @@ namespace Depends
                         // don't track if the cell contains nothing
                         if (data[y + 1, x + 1] != null) // adjust indices to be one-based
                         {
+                            Microsoft.Office.Interop.Excel.Range cell = (Microsoft.Office.Interop.Excel.Range)urng.Item[r, c];
                             var kvp = makeCOMRef(r, c, wsname, wbname, path, wb, worksheet, cell, _formulas);
                             _all_cells.Add(kvp.Key, kvp.Value);
                         }
