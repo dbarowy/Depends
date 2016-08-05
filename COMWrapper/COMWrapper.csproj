@@ -55,14 +55,6 @@
     <Compile Include="Workbook.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\ExceLintUI\ExceLintUI.csproj">
-      <Project>{f9becb73-f7a5-4462-ae0d-b90ba40e5cf4}</Project>
-      <Name>ExceLintUI</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ExceLint\ExceLint.fsproj">
-      <Project>{a62bca5a-eb55-46ed-a49a-fdb34771b605}</Project>
-      <Name>ExceLint</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Depends\Depends.csproj">
       <Project>{34fa1bc2-cfd6-44ec-ac0c-dfc62313e4bf}</Project>
       <Name>Depends</Name>
