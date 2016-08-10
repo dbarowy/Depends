@@ -4,7 +4,6 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Excel = Microsoft.Office.Interop.Excel;
 using System.Linq;
-using Microsoft.Office.Core;
 
 namespace COMWrapper
 {
