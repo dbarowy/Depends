@@ -22,6 +22,8 @@ namespace Depends
         public SparseMatrix(SparseMatrix other)
         {
             _numVertices = other._numVertices;
+            _matrix = new Dictionary<AST.Address, Dictionary<AST.Address, HashSet<int>>>(_numVertices);
+
             foreach (var kvp in other._matrix)
             {
                 var source = kvp.Key;
