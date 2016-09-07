@@ -239,12 +239,22 @@ namespace Depends
                 var diff = singleRefDiff(addr, _formulas[addr], frm);
 
                 // for all deleted references, remove links
+                foreach (AST.Address dAddr in diff.Deleted)
+                {
+                    // remove edge from formula node to input node
+                    dag2._f2i[addr].Remove(dAddr);
+                    // remove edge from input node to formula node
+                    dag2._i2f[dAddr].Remove(addr);
+                }
 
                 // for all added references, add links
-
-                // for all changed references, do nothing
-
-                
+                foreach (AST.Address aAddr in diff.Deleted)
+                {
+                    // add edge from formula node to input node
+                    dag2._f2i[addr].Add(aAddr);
+                    // add edge from input node to formula node
+                    dag2._i2f[aAddr].Add(addr);
+                }
             }
 
             foreach (var cell_cr in dag2._all_cells.KeysU)
