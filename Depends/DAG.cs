@@ -63,29 +63,19 @@ namespace Depends
             return Path.Combine(paths);
         }
 
-        public DAG CopyWithUpdatedFormulas(KeyValuePair<AST.Address,string>[] formulas, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
+        public DAG CWUF(KeyValuePair<AST.Address, string>[] formulas, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             var dag2 = new DAG(this);
 
-            // clear graph
-            dag2._all_vectors.Clear();
-            dag2._do_not_perturb.Clear();
-            dag2._f2v.Clear();
-            dag2._v2f.Clear();
-            dag2._i2v.Clear();
-            dag2._v2i.Clear();
-            dag2._i2f.Clear();
-            dag2._f2i.Clear();
-
-            // get all of the open workbooks & worksheets
+            // get references to all of the open workbooks & worksheets
             var openWBNames = new Dictionary<string, Microsoft.Office.Interop.Excel.Workbook>();
-            var openWSNames = new Dictionary<Tuple<string,string>, Microsoft.Office.Interop.Excel.Worksheet>();
+            var openWSNames = new Dictionary<Tuple<string, string>, Microsoft.Office.Interop.Excel.Worksheet>();
             foreach (Microsoft.Office.Interop.Excel.Workbook wb in app.Workbooks)
             {
                 openWBNames.Add(wb.Name, wb);
                 foreach (Microsoft.Office.Interop.Excel.Worksheet ws in wb.Worksheets)
                 {
-                    openWSNames.Add(new Tuple<string,string>(wb.Name, ws.Name), ws);
+                    openWSNames.Add(new Tuple<string, string>(wb.Name, ws.Name), ws);
                 }
             }
 
@@ -116,6 +106,145 @@ namespace Depends
 
                 // add formula COMRef to cells
                 dag2._all_cells[addr] = kvp2.Value;
+            }
+        }
+
+        private class SingleRefDiff
+        {
+            HashSet<AST.Address> _same;
+            HashSet<AST.Address> _deleted;
+            HashSet<AST.Address> _added;
+
+            public SingleRefDiff(HashSet<AST.Address> same, HashSet<AST.Address> deleted, HashSet<AST.Address> added)
+            {
+                _same = same;
+                _deleted = deleted;
+                _added = added;
+            }
+
+            public HashSet<AST.Address> Same
+            {
+                get
+                {
+                    return _same;
+                }
+            }
+
+            public HashSet<AST.Address> Deleted
+            {
+                get
+                {
+                    return _deleted;
+                }
+            }
+
+            public HashSet<AST.Address> Added
+            {
+                get
+                {
+                    return _added;
+                }
+            }
+        }
+
+        private HashSet<T> Union<T>(HashSet<T> hs1, HashSet<T> hs2)
+        {
+            var hsNew = new HashSet<T>(hs1);
+            hsNew.UnionWith(hs2);
+            return hsNew;
+        }
+
+        private HashSet<T> Intersect<T>(HashSet<T> hs1, HashSet<T> hs2)
+        {
+            var hsNew = new HashSet<T>(hs1);
+            hsNew.IntersectWith(hs2);
+            return hsNew;
+        }
+
+        private HashSet<T> Difference<T>(HashSet<T> hs1, HashSet<T> hs2)
+        {
+            var hsNew = new HashSet<T>(hs1);
+            hsNew.ExceptWith(hs2);
+            return hsNew;
+        }
+
+        private SingleRefDiff singleRefDiff(AST.Address addr, string fOld, string fNew)
+        {
+            var ssOld = new HashSet<AST.Address>(Parcel.addrReferencesFromFormula(fOld, addr.Path, addr.WorkbookName, addr.WorksheetName, false));
+            var ssNew = new HashSet<AST.Address>(Parcel.addrReferencesFromFormula(fNew, addr.Path, addr.WorkbookName, addr.WorksheetName, false));
+
+            var same = Union(ssOld, ssNew);
+            var deleted = Difference(ssOld, ssNew);
+            var added = Difference(ssNew, ssOld);
+
+            return new SingleRefDiff(same, deleted, added);
+        }
+
+        public DAG CopyWithUpdatedFormulas(KeyValuePair<AST.Address,string>[] formulas, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
+        {
+            var dag2 = new DAG(this);
+
+            // clear graph
+            dag2._all_vectors.Clear();
+            dag2._do_not_perturb.Clear();
+            dag2._f2v.Clear();
+            dag2._v2f.Clear();
+            dag2._i2v.Clear();
+            dag2._v2i.Clear();
+            dag2._i2f.Clear();
+            dag2._f2i.Clear();
+
+            // get all of the open workbooks & worksheets
+            var openWBNames = new Dictionary<string, Microsoft.Office.Interop.Excel.Workbook>();
+            var openWSNames = new Dictionary<Tuple<string,string>, Microsoft.Office.Interop.Excel.Worksheet>();
+            foreach (Microsoft.Office.Interop.Excel.Workbook wb in app.Workbooks)
+            {
+                openWBNames.Add(wb.Name, wb);
+                foreach (Microsoft.Office.Interop.Excel.Worksheet ws in wb.Worksheets)
+                {
+                    openWSNames.Add(new Tuple<string,string>(wb.Name, ws.Name), ws);
+                }
+            }
+
+            // replace old formulas with new ones
+            foreach (var newfrm in formulas)
+            {
+                var addr = newfrm.Key;
+                var frm = newfrm.Value;
+                var x = addr.Col;
+                var y = addr.Row;
+                var wb = openWBNames[addr.WorkbookName];
+                var ws = openWSNames[new Tuple<string, string>(addr.WorkbookName, addr.WorksheetName)];
+                var cell = this.getCOMRefForAddress(addr).Range;
+
+                // update DAG formula string
+                dag2._formulas[addr] = frm;
+
+                // make a new COMRef
+                var kvp2 = makeCOMRef(
+                    y,
+                    x,
+                    addr.WorksheetName,
+                    addr.WorkbookName,
+                    addr.Path,
+                    wb,
+                    ws,
+                    cell,
+                    dag2._formulas);
+
+                // add formula COMRef to cells
+                dag2._all_cells[addr] = kvp2.Value;
+
+                // get induced reference diffs
+                var diff = singleRefDiff(addr, _formulas[addr], frm);
+
+                // for all deleted references, remove links
+
+                // for all added references, add links
+
+                // for all changed references, do nothing
+
+                
             }
 
             foreach (var cell_cr in dag2._all_cells.KeysU)
