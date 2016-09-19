@@ -63,51 +63,51 @@ namespace Depends
             return Path.Combine(paths);
         }
 
-        public DAG CWUF(KeyValuePair<AST.Address, string>[] formulas, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
-        {
-            var dag2 = new DAG(this);
+        //public DAG CWUF(KeyValuePair<AST.Address, string>[] formulas, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
+        //{
+        //    var dag2 = new DAG(this);
 
-            // get references to all of the open workbooks & worksheets
-            var openWBNames = new Dictionary<string, Microsoft.Office.Interop.Excel.Workbook>();
-            var openWSNames = new Dictionary<Tuple<string, string>, Microsoft.Office.Interop.Excel.Worksheet>();
-            foreach (Microsoft.Office.Interop.Excel.Workbook wb in app.Workbooks)
-            {
-                openWBNames.Add(wb.Name, wb);
-                foreach (Microsoft.Office.Interop.Excel.Worksheet ws in wb.Worksheets)
-                {
-                    openWSNames.Add(new Tuple<string, string>(wb.Name, ws.Name), ws);
-                }
-            }
+        //    // get references to all of the open workbooks & worksheets
+        //    var openWBNames = new Dictionary<string, Microsoft.Office.Interop.Excel.Workbook>();
+        //    var openWSNames = new Dictionary<Tuple<string, string>, Microsoft.Office.Interop.Excel.Worksheet>();
+        //    foreach (Microsoft.Office.Interop.Excel.Workbook wb in app.Workbooks)
+        //    {
+        //        openWBNames.Add(wb.Name, wb);
+        //        foreach (Microsoft.Office.Interop.Excel.Worksheet ws in wb.Worksheets)
+        //        {
+        //            openWSNames.Add(new Tuple<string, string>(wb.Name, ws.Name), ws);
+        //        }
+        //    }
 
-            // replace old formulas with new ones
-            foreach (var newfrm in formulas)
-            {
-                var addr = newfrm.Key;
-                var x = addr.Col;
-                var y = addr.Row;
-                var wb = openWBNames[addr.WorkbookName];
-                var ws = openWSNames[new Tuple<string, string>(addr.WorkbookName, addr.WorksheetName)];
-                var cell = this.getCOMRefForAddress(addr).Range;
+        //    // replace old formulas with new ones
+        //    foreach (var newfrm in formulas)
+        //    {
+        //        var addr = newfrm.Key;
+        //        var x = addr.Col;
+        //        var y = addr.Row;
+        //        var wb = openWBNames[addr.WorkbookName];
+        //        var ws = openWSNames[new Tuple<string, string>(addr.WorkbookName, addr.WorksheetName)];
+        //        var cell = this.getCOMRefForAddress(addr).Range;
 
-                // update DAG formula string
-                dag2._formulas[addr] = newfrm.Value;
+        //        // update DAG formula string
+        //        dag2._formulas[addr] = newfrm.Value;
 
-                // make a new COMRef
-                var kvp2 = makeCOMRef(
-                    y,
-                    x,
-                    addr.WorksheetName,
-                    addr.WorkbookName,
-                    addr.Path,
-                    wb,
-                    ws,
-                    cell,
-                    dag2._formulas);
+        //        // make a new COMRef
+        //        var kvp2 = makeCOMRef(
+        //            y,
+        //            x,
+        //            addr.WorksheetName,
+        //            addr.WorkbookName,
+        //            addr.Path,
+        //            wb,
+        //            ws,
+        //            cell,
+        //            dag2._formulas);
 
-                // add formula COMRef to cells
-                dag2._all_cells[addr] = kvp2.Value;
-            }
-        }
+        //        // add formula COMRef to cells
+        //        dag2._all_cells[addr] = kvp2.Value;
+        //    }
+        //}
 
         private class SingleRefDiff
         {
