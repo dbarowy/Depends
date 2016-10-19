@@ -286,13 +286,19 @@ namespace Depends
             stream.Close();
         }
 
+        public static bool CachedDAGExists(string cacheDirPath, string workbookName)
+        {
+            var fileName = SerializationPath(cacheDirPath, workbookName);
+            return File.Exists(fileName);
+        }
+
         public static DAG DAGFromCache(Boolean forceDAGBuild, Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
         {
             // get path
             var fileName = SerializationPath(cacheDirPath, wb.Name);
 
             // return DAG from cache path, otherwise build and serialize to cache path
-            if (!forceDAGBuild && File.Exists(fileName))
+            if (!forceDAGBuild && CachedDAGExists(cacheDirPath, wb.Name))
             {
                 var dag = DeserializeFrom(fileName, app, p);
 
@@ -394,7 +400,12 @@ namespace Depends
             }
 
             // bulk read worksheets & set progress total
-            p.TotalWorkUnits = fastFormulaRead(wb);
+            var data = FastFormulaRead(wb);
+            _formulas = data.formulas;
+            _f2v = data.f2v;
+            _f2i = data.f2i;
+            _all_cells = data.allCells;
+            p.TotalWorkUnits = data.formulas.Count();
 
             // set update interval (must be set after p.Total,
             // otherwise it is incorrect).
@@ -584,115 +595,188 @@ namespace Depends
             return all.Count();
         }
 
-        // returns the total number of formulas
-        private long fastFormulaRead(Microsoft.Office.Interop.Excel.Workbook wb)
+        private struct RawGraph
         {
+            public FormulaDict formulas;
+            public Formula2VectDict f2v;
+            public Formula2InputCellDict f2i;
+            public CellRefDict allCells;
+
+            public RawGraph(bool yeah)
+            {
+                formulas = new FormulaDict();
+                f2v = new Formula2VectDict();
+                f2i = new Formula2InputCellDict();
+                allCells = new CellRefDict();
+            }
+        }
+
+        private struct DataAt<T>
+        {
+            public int Row;     // row
+            public int Column;  // column
+            public T Data;      // data
+
+            public DataAt(int row, int column, T data)
+            {
+                Row = row;
+                Column = column;
+                Data = data;
+            }
+        }
+
+        private static List<DataAt<string>> ReadFormulaStringList(Microsoft.Office.Interop.Excel.Range urng)
+        {
+            // init R1C1 extractor
+            var regex = new Regex("^R([0-9]+)C([0-9]+)$", RegexOptions.Compiled);
+
+            // init formula validator
+            var fn_filter = new Regex("^=", RegexOptions.Compiled);
+
+            // get dimensions
+            var left = urng.Column;                      // 1-based left-hand y coordinate
+            var right = urng.Columns.Count + left - 1;   // 1-based right-hand y coordinate
+            var top = urng.Row;                          // 1-based top x coordinate
+            var bottom = urng.Rows.Count + top - 1;      // 1-based bottom x coordinate
+
+            // init
+            int width = right - left + 1;
+            int height = bottom - top + 1;
+
+            // output
+            List<DataAt<string>> fList = new List<DataAt<string>>();
+
+            // if the used range is a single cell, Excel changes the type
+            if (left == right && top == bottom)
+            {
+                var f = (string)urng.Formula;
+
+                if (fn_filter.IsMatch(f))
+                {
+                    fList.Add(new DataAt<string>(top, left, f));
+                }
+            }
+            else
+            {
+                // array read of formula cells
+                // note that this is a 1-based 2D multiarray
+                object[,] formulas = (object[,])urng.Formula;
+
+                // for every cell that is actually a formula, add to 
+                // formula dictionary & init formula lookup dictionaries
+                for (int c = 1; c <= width; c++)
+                {
+                    for (int r = 1; r <= height; r++)
+                    {
+                        var f = (string)formulas[r, c];
+                        if (fn_filter.IsMatch(f))
+                        {
+                            fList.Add(new DataAt<string>(r + top - 1, c + left - 1, f));
+                        }
+                    }
+                }
+            }
+            return fList;
+        }
+
+        private static List<DataAt<Microsoft.Office.Interop.Excel.Range>> ReadDataStringList(Microsoft.Office.Interop.Excel.Range urng)
+        {
+            // get dimensions
+            var left = urng.Column;                      // 1-based left-hand y coordinate
+            var right = urng.Columns.Count + left - 1;   // 1-based right-hand y coordinate
+            var top = urng.Row;                          // 1-based top x coordinate
+            var bottom = urng.Rows.Count + top - 1;      // 1-based bottom x coordinate
+
+            // init
+            int width = right - left + 1;
+            int height = bottom - top + 1;
+
+            // output
+            List<DataAt<Microsoft.Office.Interop.Excel.Range>> rList = new List<DataAt<Microsoft.Office.Interop.Excel.Range>>();
+
+            // array read of data cells
+            // note that this is a 1-based 2D multiarray
+            // we grab this in array form so that we can avoid a COM
+            // call for every blank-cell check
+            object[,] data = (object[,])urng.Value2;
+
+            // if the worksheet contains nothing, data will be null
+            if (data != null)
+            {
+                // for each COM object in the used range, create an address object
+                // WITHOUT calling any methods on the COM object itself
+                int x_old = -1;
+                int x = -1;
+                int y = 0;
+
+                for (int i = 0; i < width * height; i++)
+                {
+                    // The basic idea here is that we know how Excel iterates over collections
+                    // of cells.  The Excel.Range returned by UsedRange is always rectangular.
+                    // Thus we can calculate the addresses of each COM cell reference without
+                    // needing to incur the overhead of actually asking it for its address.
+                    x = (x + 1) % width;
+                    // increment y if x wrapped (x < x_old or x == x_old when width == 1)
+                    y = x <= x_old ? y + 1 : y;
+
+                    int c = x + left;
+                    int r = y + top;
+
+                    // don't track if the cell contains nothing
+                    if (data[y + 1, x + 1] != null) // adjust indices to be one-based
+                    {
+                        rList.Add(new DataAt<Microsoft.Office.Interop.Excel.Range>(r, c, (Microsoft.Office.Interop.Excel.Range)urng.Item[r, c]));
+                    }
+
+                    x_old = x;
+                }
+            }
+
+            return rList;
+        }
+
+        private static RawGraph FastFormulaRead(Microsoft.Office.Interop.Excel.Workbook wb)
+        {
+            // allocate struct, etc.
+            var retVal = new RawGraph(true);
+
             // get names once
             var wbfullname = wb.FullName;
             var wbname = wb.Name;
             var path = wb.Path;
 
-            // init R1C1 extractor
-            var regex = new Regex("^R([0-9]+)C([0-9]+)$");
-
-            // init formula validator
-            var fn_filter = new Regex("^=", RegexOptions.Compiled);
-
             foreach (Microsoft.Office.Interop.Excel.Worksheet worksheet in wb.Worksheets)
             {
+                // get name once
+                var wsname = worksheet.Name;
+
                 // get used range
                 Microsoft.Office.Interop.Excel.Range urng = worksheet.UsedRange;
 
-                // get dimensions
-                var left = urng.Column;                      // 1-based left-hand y coordinate
-                var right = urng.Columns.Count + left - 1;   // 1-based right-hand y coordinate
-                var top = urng.Row;                          // 1-based top x coordinate
-                var bottom = urng.Rows.Count + top - 1;      // 1-based bottom x coordinate
+                // get formulas
+                var formulas = ReadFormulaStringList(urng);
 
-                // get worksheet name
-                var wsname = worksheet.Name;
+                // get COM refs
+                var refs = ReadDataStringList(urng);
 
-                // init
-                int width = right - left + 1;
-                int height = bottom - top + 1;
-
-                // if the used range is a single cell, Excel changes the type
-                if (left == right && top == bottom)
+                // process formulas
+                foreach (var formula in formulas)
                 {
-                    var f = (string)urng.Formula;
-                    if (fn_filter.IsMatch(f))
-                    {
-                        var addr = AST.Address.fromR1C1withMode(top, left, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
-                        _formulas.Add(addr, f);
-                        _f2v.Add(addr, new HashSet<AST.Range>());
-                        _f2i.Add(addr, new HashSet<AST.Address>());
-                    }
+                    var addr = AST.Address.fromR1C1withMode(formula.Row, formula.Column, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
+                    retVal.formulas.Add(addr, formula.Data);
+                    retVal.f2v.Add(addr, new HashSet<AST.Range>());
+                    retVal.f2i.Add(addr, new HashSet<AST.Address>());
                 }
-                else
+
+                // process COM refs
+                foreach (var cr in refs)
                 {
-                    // array read of formula cells
-                    // note that this is a 1-based 2D multiarray
-                    object[,] formulas = (object[,])urng.Formula;
-
-                    // for every cell that is actually a formula, add to 
-                    // formula dictionary & init formula lookup dictionaries
-                    for (int c = 1; c <= width; c++)
-                    {
-                        for (int r = 1; r <= height; r++)
-                        {
-                            var f = (string)formulas[r, c];
-                            if (fn_filter.IsMatch(f))
-                            {
-                                var addr = AST.Address.fromR1C1withMode(r + top - 1, c + left - 1, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
-                                _formulas.Add(addr, f);
-                                _f2v.Add(addr, new HashSet<AST.Range>());
-                                _f2i.Add(addr, new HashSet<AST.Address>());
-                            }
-                        }
-                    }
-                }
-                // array read of data cells
-                // note that this is a 1-based 2D multiarray
-                // we grab this in array form so that we can avoid a COM
-                // call for every blank-cell check
-                object[,] data = (object[,])urng.Value2;
-
-                // if the worksheet contains nothing, data will be null
-                if (data != null)
-                {
-                    // for each COM object in the used range, create an address object
-                    // WITHOUT calling any methods on the COM object itself
-                    int x_old = -1;
-                    int x = -1;
-                    int y = 0;
-
-                    for (int i = 0; i < width * height; i++)
-                    {
-                        // The basic idea here is that we know how Excel iterates over collections
-                        // of cells.  The Excel.Range returned by UsedRange is always rectangular.
-                        // Thus we can calculate the addresses of each COM cell reference without
-                        // needing to incur the overhead of actually asking it for its address.
-                        x = (x + 1) % width;
-                        // increment y if x wrapped (x < x_old or x == x_old when width == 1)
-                        y = x <= x_old ? y + 1 : y;
-
-                        int c = x + left;
-                        int r = y + top;
-
-                        // don't track if the cell contains nothing
-                        if (data[y + 1, x + 1] != null) // adjust indices to be one-based
-                        {
-                            Microsoft.Office.Interop.Excel.Range cell = (Microsoft.Office.Interop.Excel.Range)urng.Item[r, c];
-                            var kvp = makeCOMRef(r, c, wsname, wbname, path, wb, worksheet, cell, _formulas);
-                            _all_cells.Add(kvp.Key, kvp.Value);
-                        }
-
-                        x_old = x;
-                    }
+                    var kvp = makeCOMRef(cr.Row, cr.Column, wsname, wbname, path, wb, worksheet, cr.Data, retVal.formulas);
+                    retVal.allCells.Add(kvp.Key, kvp.Value);
                 }
             }
 
-            return _formulas.Count;
+            return retVal;
         }
 
         // This seriously ugly method exists because we need to call it from several places,
