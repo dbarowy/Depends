@@ -644,7 +644,7 @@ namespace Depends
             int height = bottom - top + 1;
 
             // output
-            List<DataAt<string>> fList = new List<DataAt<string>>();
+            var fList = new List<DataAt<string>>();
 
             // if the used range is a single cell, Excel changes the type
             if (left == right && top == bottom)
@@ -679,7 +679,7 @@ namespace Depends
             return fList;
         }
 
-        private static List<DataAt<Microsoft.Office.Interop.Excel.Range>> ReadDataStringList(Microsoft.Office.Interop.Excel.Range urng)
+        private static List<DataAt<Microsoft.Office.Interop.Excel.Range>> ReadCOMRefList(Microsoft.Office.Interop.Excel.Range urng)
         {
             // get dimensions
             var left = urng.Column;                      // 1-based left-hand y coordinate
@@ -692,7 +692,7 @@ namespace Depends
             int height = bottom - top + 1;
 
             // output
-            List<DataAt<Microsoft.Office.Interop.Excel.Range>> rList = new List<DataAt<Microsoft.Office.Interop.Excel.Range>>();
+            var rList = new List<DataAt<Microsoft.Office.Interop.Excel.Range>>();
 
             // array read of data cells
             // note that this is a 1-based 2D multiarray
@@ -735,6 +735,108 @@ namespace Depends
             return rList;
         }
 
+        private static List<DataAt<string>> ReadInputList(Microsoft.Office.Interop.Excel.Range urng)
+        {
+            // get dimensions
+            var left = urng.Column;                      // 1-based left-hand y coordinate
+            var right = urng.Columns.Count + left - 1;   // 1-based right-hand y coordinate
+            var top = urng.Row;                          // 1-based top x coordinate
+            var bottom = urng.Rows.Count + top - 1;      // 1-based bottom x coordinate
+
+            // init
+            int width = right - left + 1;
+            int height = bottom - top + 1;
+
+            // output
+            var dList = new List<DataAt<string>>();
+
+            // array read of data cells
+            // note that this is a 1-based 2D multiarray
+            // we grab this in array form so that we can avoid a COM
+            // call for every blank-cell check
+            object[,] data = (object[,])urng.Value2;
+
+            // if the worksheet contains nothing, data will be null
+            if (data != null)
+            {
+                // for each COM object in the used range, create an address object
+                // WITHOUT calling any methods on the COM object itself
+                int x_old = -1;
+                int x = -1;
+                int y = 0;
+
+                for (int i = 0; i < width * height; i++)
+                {
+                    // The basic idea here is that we know how Excel iterates over collections
+                    // of cells.  The Excel.Range returned by UsedRange is always rectangular.
+                    // Thus we can calculate the addresses of each COM cell reference without
+                    // needing to incur the overhead of actually asking it for its address.
+                    x = (x + 1) % width;
+                    // increment y if x wrapped (x < x_old or x == x_old when width == 1)
+                    y = x <= x_old ? y + 1 : y;
+
+                    int c = x + left;
+                    int r = y + top;
+
+                    // don't track if the cell contains nothing
+                    if (data[y + 1, x + 1] != null) // adjust indices to be one-based
+                    {
+                        dList.Add(new DataAt<string>(r, c, (string)data[y + 1, x + 1]));
+                    }
+
+                    x_old = x;
+                }
+            }
+
+            return dList;
+        }
+
+        public bool Changed(Microsoft.Office.Interop.Excel.Workbook wb)
+        {
+            // get names once
+            var wbfullname = wb.FullName;
+            var wbname = wb.Name;
+            var path = wb.Path;
+
+            foreach (Microsoft.Office.Interop.Excel.Worksheet worksheet in wb.Worksheets)
+            {
+                // get name once
+                var wsname = worksheet.Name;
+
+                // get used range
+                Microsoft.Office.Interop.Excel.Range urng = worksheet.UsedRange;
+
+                // get formulas
+                var formulas = ReadFormulaStringList(urng);
+
+                // check formulas
+                foreach (var formula in formulas)
+                {
+                    var addr = AST.Address.fromR1C1withMode(formula.Row, formula.Column, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
+                    if (_formulas[addr] != formula.Data)
+                    {
+                        return true;
+                    }
+                }
+
+                // get cell contents
+                var inputs = ReadInputList(urng);
+
+                // check data
+                foreach (var input in inputs)
+                {
+                    var addr = AST.Address.fromR1C1withMode(input.Row, input.Column, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
+                    var data = (string)_all_cells[addr].Range.Value2;
+                    if (data != input.Data)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         private static RawGraph FastFormulaRead(Microsoft.Office.Interop.Excel.Workbook wb)
         {
             // allocate struct, etc.
@@ -757,7 +859,7 @@ namespace Depends
                 var formulas = ReadFormulaStringList(urng);
 
                 // get COM refs
-                var refs = ReadDataStringList(urng);
+                var refs = ReadCOMRefList(urng);
 
                 // process formulas
                 foreach (var formula in formulas)
