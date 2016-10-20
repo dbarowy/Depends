@@ -150,5 +150,15 @@ namespace Depends
         {
             get { return _dict2.Keys; }
         }
+
+        public IEnumerable<KeyValuePair<T, U>> WhereT(Func<T, bool> TSelector)
+        {
+            return _dict1.Where(pair => TSelector(pair.Key));
+        }
+
+        public IEnumerable<KeyValuePair<U, T>> WhereU(Func<U, bool> USelector)
+        {
+            return _dict2.Where(pair => USelector(pair.Key));
+        }
     }
 }

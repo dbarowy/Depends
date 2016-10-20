@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using CellRefDict = Depends.BiDictionary<AST.Address, ParcelCOMShim.COMRef>;
 using VectorRefDict = Depends.BiDictionary<AST.Range, ParcelCOMShim.COMRef>;
 using FormulaDict = System.Collections.Generic.Dictionary<AST.Address, string>;
+using InputDict = System.Collections.Generic.Dictionary<AST.Address, object>;
 using Formula2VectDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Range>>;
 using Vect2FormulaDict = System.Collections.Generic.Dictionary<AST.Range, System.Collections.Generic.HashSet<AST.Address>>;
 using Vect2InputCellDict = System.Collections.Generic.Dictionary<AST.Range, System.Collections.Generic.HashSet<AST.Address>>;
@@ -26,16 +27,17 @@ namespace Depends
     [Serializable]
     public class DAG
     {
-        public static int THIS_VERSION = 4;
+        public static int THIS_VERSION = 5;
         [OptionalField]
         private int _version = THIS_VERSION;
         private readonly long _updateInterval;
         private string _path;
         private string _wbname;
         private string[] _wsnames;
-        private CellRefDict _all_cells = new CellRefDict();                 // maps every cell (including formulas) to its COMRef
+        private CellRefDict _all_cells = new CellRefDict();                 // maps every cell address (including formulas) to its COMRef
         private VectorRefDict _all_vectors = new VectorRefDict();           // maps every vector to its COMRef
         private FormulaDict _formulas = new FormulaDict();                  // maps every formula to its formula expr
+        private InputDict _inputs = new InputDict();                        // maps every cell address (including formulas) to its data
         private Formula2VectDict _f2v = new Formula2VectDict();             // maps every formula to its input vectors
         private Vect2FormulaDict _v2f = new Vect2FormulaDict();             // maps every input vector to its formulas
         private Formula2InputCellDict _f2i = new Formula2InputCellDict();   // maps every formula to its single-cell inputs
@@ -185,6 +187,7 @@ namespace Depends
             var dag2 = new DAG(this);
 
             // clear graph
+            dag2._inputs.Clear();
             dag2._all_vectors.Clear();
             dag2._do_not_perturb.Clear();
             dag2._f2v.Clear();
@@ -402,6 +405,7 @@ namespace Depends
             // bulk read worksheets & set progress total
             var data = FastFormulaRead(wb);
             _formulas = data.formulas;
+            _inputs = data.inputs;
             _f2v = data.f2v;
             _f2i = data.f2i;
             _all_cells = data.allCells;
@@ -432,6 +436,7 @@ namespace Depends
             _all_cells = new CellRefDict(dag._all_cells);
             _all_vectors = new VectorRefDict(dag._all_vectors);
             _formulas = new FormulaDict(dag._formulas);
+            _inputs = new InputDict(dag._inputs);
             _f2v = new Formula2VectDict(dag._f2v);
             _v2f = new Vect2FormulaDict(dag._v2f);
             _f2i = new Formula2InputCellDict(dag._f2i);
@@ -598,6 +603,7 @@ namespace Depends
         private struct RawGraph
         {
             public FormulaDict formulas;
+            public InputDict inputs;
             public Formula2VectDict f2v;
             public Formula2InputCellDict f2i;
             public CellRefDict allCells;
@@ -605,6 +611,7 @@ namespace Depends
             public RawGraph(bool yeah)
             {
                 formulas = new FormulaDict();
+                inputs = new InputDict();
                 f2v = new Formula2VectDict();
                 f2i = new Formula2InputCellDict();
                 allCells = new CellRefDict();
@@ -735,7 +742,7 @@ namespace Depends
             return rList;
         }
 
-        private static List<DataAt<string>> ReadInputList(Microsoft.Office.Interop.Excel.Range urng)
+        private static List<DataAt<object>> ReadInputList(Microsoft.Office.Interop.Excel.Range urng)
         {
             // get dimensions
             var left = urng.Column;                      // 1-based left-hand y coordinate
@@ -748,7 +755,7 @@ namespace Depends
             int height = bottom - top + 1;
 
             // output
-            var dList = new List<DataAt<string>>();
+            var dList = new List<DataAt<object>>();
 
             // array read of data cells
             // note that this is a 1-based 2D multiarray
@@ -781,7 +788,7 @@ namespace Depends
                     // don't track if the cell contains nothing
                     if (data[y + 1, x + 1] != null) // adjust indices to be one-based
                     {
-                        dList.Add(new DataAt<string>(r, c, (string)data[y + 1, x + 1]));
+                        dList.Add(new DataAt<object>(r, c, data[y + 1, x + 1]));
                     }
 
                     x_old = x;
@@ -809,6 +816,23 @@ namespace Depends
                 // get formulas
                 var formulas = ReadFormulaStringList(urng);
 
+                // short-circuit for formula additions and removals
+                var fcnt = _formulas.Where(pair => pair.Key.A1Worksheet() == wsname).Count();
+                if (formulas.Count != fcnt)
+                {
+                    return true;
+                }
+
+                // get cell contents
+                var inputs = ReadInputList(urng);
+
+                // short-circuit for input additions and removals
+                var icnt = _all_cells.WhereT(addr => addr.A1Worksheet() == wsname).Count();
+                if (inputs.Count != icnt)
+                {
+                    return true;
+                }
+
                 // check formulas
                 foreach (var formula in formulas)
                 {
@@ -819,22 +843,71 @@ namespace Depends
                     }
                 }
 
-                // get cell contents
-                var inputs = ReadInputList(urng);
-
                 // check data
                 foreach (var input in inputs)
                 {
                     var addr = AST.Address.fromR1C1withMode(input.Row, input.Column, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
-                    var data = (string)_all_cells[addr].Range.Value2;
-                    if (data != input.Data)
+                    object data = _inputs[addr];
+                    
+                    // There are only two possibilities: data is a value type or data is a reference type
+                    // If data is a value type, then input must also be.
+                    // If data is not a value type, then it must be a string, and since both
+                    // will be refs to different locations, conversion and comparison is necessary
+
+                    // double
+                    if (data.GetType() == typeof(double))
                     {
-                        return true;
+                        if ((double)data != (double)input.Data)
+                        {
+                            return true;
+                        }
+                    // int
+                    } else if (data.GetType() == typeof(int))
+                    {
+                        if ((int)data != (int)input.Data)
+                        {
+                            return true;
+                        }
+                    // string
+                    } else
+                    {
+                        string d = Convert.ToString(data);
+                        string i = Convert.ToString(input.Data);
+                        if (d.CompareTo(i) != 0)
+                        {
+                            // strings differ
+                            return true;
+                        }
                     }
                 }
             }
 
             return false;
+        }
+
+        private class AddrCache
+        {
+            Dictionary<Tuple<int, int>, AST.Address> addrs;
+
+            public AddrCache(int initSz)
+            {
+                addrs = new Dictionary<Tuple<int, int>, AST.Address>(initSz);
+            }
+
+            public AST.Address getAddr(int row, int col, string wsname, string wbname, string path)
+            {
+                var rc = new Tuple<int, int>(row, col);
+                AST.Address addr;
+                if (addrs.ContainsKey(rc))
+                {
+                    addr = addrs[rc];
+                } else
+                {
+                    addr = AST.Address.fromR1C1withMode(row, col, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
+                    addrs.Add(rc, addr);
+                }
+                return addr;
+            }
         }
 
         private static RawGraph FastFormulaRead(Microsoft.Office.Interop.Excel.Workbook wb)
@@ -855,8 +928,14 @@ namespace Depends
                 // get used range
                 Microsoft.Office.Interop.Excel.Range urng = worksheet.UsedRange;
 
+                // make address object cache
+                var addrCache = new AddrCache(urng.Count);
+
                 // get formulas
                 var formulas = ReadFormulaStringList(urng);
+
+                // get data
+                var inputs = ReadInputList(urng);
 
                 // get COM refs
                 var refs = ReadCOMRefList(urng);
@@ -864,17 +943,26 @@ namespace Depends
                 // process formulas
                 foreach (var formula in formulas)
                 {
-                    var addr = AST.Address.fromR1C1withMode(formula.Row, formula.Column, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
+                    var addr = addrCache.getAddr(formula.Row, formula.Column, wsname, wbname, path);
                     retVal.formulas.Add(addr, formula.Data);
                     retVal.f2v.Add(addr, new HashSet<AST.Range>());
                     retVal.f2i.Add(addr, new HashSet<AST.Address>());
                 }
 
-                // process COM refs
-                foreach (var cr in refs)
+                // process data
+                foreach (var input in inputs)
                 {
-                    var kvp = makeCOMRef(cr.Row, cr.Column, wsname, wbname, path, wb, worksheet, cr.Data, retVal.formulas);
-                    retVal.allCells.Add(kvp.Key, kvp.Value);
+                    var addr = addrCache.getAddr(input.Row, input.Column, wsname, wbname, path);
+                    retVal.inputs.Add(addr, input.Data);
+                }
+
+                // process COM refs
+                foreach (var drng in refs)
+                {
+                    var addr = addrCache.getAddr(drng.Row, drng.Column, wsname, wbname, path);
+                    var formula = retVal.formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(retVal.formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
+                    var cr = new ParcelCOMShim.LocalCOMRef(wb, worksheet, drng.Data, path, wbname, wsname, formula, 1, 1);
+                    retVal.allCells.Add(addr, cr);
                 }
             }
 
