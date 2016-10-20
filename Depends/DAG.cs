@@ -854,8 +854,14 @@ namespace Depends
                     // If data is not a value type, then it must be a string, and since both
                     // will be refs to different locations, conversion and comparison is necessary
 
+                    // can't be the same value if they're not even
+                    // the same data type
+                    if (data.GetType() != input.Data.GetType())
+                    {
+                        return true;
+                    }
                     // double
-                    if (data.GetType() == typeof(double))
+                    else if (data.GetType() == typeof(double))
                     {
                         if ((double)data != (double)input.Data)
                         {
