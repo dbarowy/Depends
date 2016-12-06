@@ -7,6 +7,8 @@ using System.Linq;
 
 namespace COMWrapper
 {
+    public class WorkbookOpenException : Exception { }
+
     public class Application : IDisposable
     {
         Excel.Application _app;
@@ -70,7 +72,15 @@ namespace COMWrapper
 
             // init wrapped workbook
             var wb_idx = _wbs.Count + 1; // Excel uses 1-based arrays
-            var wb = new Workbook(_app.Workbooks[wb_idx], _app);
+            var wbref = _app.Workbooks[wb_idx];
+
+            // if the open call above failed, stop now
+            if (wbref == null)
+            {
+                throw new WorkbookOpenException();
+            }
+
+            var wb = new Workbook(wbref, _app);
 
             // add to list
             _wbs.Add(wb);
