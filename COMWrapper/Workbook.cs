@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 using Excel = Microsoft.Office.Interop.Excel;
 using Depends;
+using System.Collections.Generic;
 
 namespace COMWrapper
 {
@@ -10,6 +11,8 @@ namespace COMWrapper
         private Excel.Application _app;
         private Excel.Workbook _wb;
         private String _wb_name;
+        private bool _fetched_graph = false;
+        private DAG.RawGraph _raw_graph;
 
         public Workbook(Excel.Workbook wb, Excel.Application app)
         {
@@ -28,6 +31,19 @@ namespace COMWrapper
         public DAG buildDependenceGraph()
         {
             return new DAG(_wb, _app, true);
+        }
+
+        public Dictionary<AST.Address,string> Formulas
+        {
+            get
+            {
+                if (!_fetched_graph)
+                {
+                    _raw_graph = DAG.FastFormulaRead(_wb);
+                    _fetched_graph = true;
+                }
+                return _raw_graph.formulas;
+            }
         }
 
         public string WorkbookName

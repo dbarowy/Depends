@@ -600,7 +600,7 @@ namespace Depends
             return all.Count();
         }
 
-        private struct RawGraph
+        public struct RawGraph
         {
             public FormulaDict formulas;
             public InputDict inputs;
@@ -916,7 +916,7 @@ namespace Depends
             }
         }
 
-        private static RawGraph FastFormulaRead(Microsoft.Office.Interop.Excel.Workbook wb)
+        public static RawGraph FastFormulaRead(Microsoft.Office.Interop.Excel.Workbook wb)
         {
             // allocate struct, etc.
             var retVal = new RawGraph(true);
