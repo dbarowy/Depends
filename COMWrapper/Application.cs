@@ -7,7 +7,7 @@ using System.Linq;
 
 namespace COMWrapper
 {
-    public class WorkbookOpenException : Exception { }
+    public class WorkbookOpenException : Exception {}
 
     public class Application : IDisposable
     {
@@ -17,6 +17,12 @@ namespace COMWrapper
         public Application()
         {
             _app = new Excel.Application();
+
+            // set app properties once
+            _app.AskToUpdateLinks = false;
+            _app.AutomationSecurity = Microsoft.Office.Core.MsoAutomationSecurity.msoAutomationSecurityForceDisable;
+            _app.DisplayAlerts = false;
+
             _wbs = new List<Workbook>();
         }
 
@@ -41,16 +47,48 @@ namespace COMWrapper
             MSDOS = 3
         }
 
+        public enum CWFileType
+        {
+            XLS,
+            XLSX,
+            Unknown
+        }
+
+        public static CWFileType MagicBytes(string fileabspath)
+        {
+            byte[] xlsx1 = { 0x50, 0x4B, 0x03, 0x04 };
+            byte[] xlsx2 = { 0x50, 0x4B, 0x05, 0x06 };
+            byte[] xlsx3 = { 0x50, 0x4B, 0x07, 0x08 };
+            byte[] xls = { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };
+
+            byte[] first8 = System.IO.File.ReadAllBytes(fileabspath).Take(8).ToArray();
+            byte[] first4 = first8.Take(4).ToArray();
+
+            if (first8.SequenceEqual(xls))
+            {
+                return CWFileType.XLS;
+            } else if (first4.SequenceEqual(xlsx1)
+                       || first4.SequenceEqual(xlsx2)
+                       || first4.SequenceEqual(xlsx3))
+            {
+                return CWFileType.XLSX;
+            } else
+            {
+                return CWFileType.Unknown;
+            }
+        }
+
         public Workbook OpenWorkbook(string relpath)
         {
             // get the absolute path
             var abspath = System.IO.Path.GetFullPath(relpath);
 
-            // we need to disable all alerts, e.g., password prompts, etc.
-            _app.DisplayAlerts = false;
-
-            // disable macros
-            _app.AutomationSecurity = Microsoft.Office.Core.MsoAutomationSecurity.msoAutomationSecurityForceDisable;
+            // make sure that this is actually an Excel file
+            var ft = MagicBytes(abspath);
+            if (ft != CWFileType.XLS && ft != CWFileType.XLSX)
+            {
+                throw new WorkbookOpenException();
+            }
 
             // This call is stupid.  See:
             // http://msdn.microsoft.com/en-us/library/microsoft.office.interop.excel.workbooks.open%28v=office.11%29.aspx
@@ -70,7 +108,7 @@ namespace COMWrapper
                                Missing.Value,               // Local; really "use my locale?" (Boolean)
                                XlCorruptLoad.RepairFile);   // CorruptLoad (XlCorruptLoad enum)
 
-            // init wrapped workbook
+            
             var wb_idx = _wbs.Count + 1; // Excel uses 1-based arrays
             var wbref = _app.Workbooks[wb_idx];
 
@@ -80,6 +118,17 @@ namespace COMWrapper
                 throw new WorkbookOpenException();
             }
 
+            // do not autorecover!
+            wbref.EnableAutoRecover = false;
+
+            // if this workbook has links, break them
+            var links = (Array) wbref.LinkSources(Excel.XlLink.xlExcelLinks);
+            for(int i = 1; i <= links.Length; i++)
+            {
+                wbref.BreakLink((string)links.GetValue(i), Excel.XlLinkType.xlLinkTypeExcelLinks);
+            }
+
+            // init wrapped workbook
             var wb = new Workbook(wbref, _app);
 
             // add to list

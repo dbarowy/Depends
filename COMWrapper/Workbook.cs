@@ -25,7 +25,7 @@ namespace COMWrapper
         {
             if (_wb != null)
             {
-                _wb.Close();
+                _wb.Close(SaveChanges: false);
                 Marshal.ReleaseComObject(_wb);
                 _wb = null;
             }
