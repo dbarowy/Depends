@@ -23,9 +23,12 @@ namespace COMWrapper
 
         public void Dispose()
         {
-            _wb.Close();
-            Marshal.ReleaseComObject(_wb);
-            _wb = null;
+            if (_wb != null)
+            {
+                _wb.Close();
+                Marshal.ReleaseComObject(_wb);
+                _wb = null;
+            }
         }
 
         public DAG buildDependenceGraph()
