@@ -12,7 +12,7 @@ namespace COMWrapper
     public class Application : IDisposable
     {
         Excel.Application _app;
-        List<Workbook> _wbs;
+        Dictionary<string,Workbook> _wbs;
 
         public Application()
         {
@@ -23,7 +23,7 @@ namespace COMWrapper
             _app.AutomationSecurity = Microsoft.Office.Core.MsoAutomationSecurity.msoAutomationSecurityForceDisable;
             _app.DisplayAlerts = false;
 
-            _wbs = new List<Workbook>();
+            _wbs = new Dictionary<string,Workbook>();
         }
 
         // All of the following private enums are poorly documented
@@ -109,7 +109,8 @@ namespace COMWrapper
                                XlCorruptLoad.RepairFile);   // CorruptLoad (XlCorruptLoad enum)
 
             
-            var wb_idx = _wbs.Count + 1; // Excel uses 1-based arrays
+            // Excel uses 1-based arrays
+            var wb_idx = _app.Workbooks.Count;
             var wbref = _app.Workbooks[wb_idx];
 
             // if the open call above failed, stop now
@@ -131,25 +132,28 @@ namespace COMWrapper
                 }
             }
 
+            // create callback to remove workbook from _wbs on Dispose()
+            string wbname = wbref.Name;
+            Action dcb = () => _wbs.Remove(wbname);  // MUST use copy of wbref.Name here!
+
             // init wrapped workbook
-            var wb = new Workbook(wbref, _app);
+            var wb = new Workbook(wbref, _app, dcb);
 
             // add to list
-            _wbs.Add(wb);
+            _wbs.Add(wb.WorkbookName, wb);
 
             return wb;
         }
 
         public void CloseWorkbookByName(String name)
         {
-            var wb = _wbs.Find( (Workbook w) => w.WorkbookName == name);
-            CloseWorkbook(wb);
+            CloseWorkbook(_wbs[name]);
         }
 
         public void CloseWorkbook(Workbook wb)
         {
             wb.Dispose();
-            _wbs = _wbs.Where((Workbook w) => w != wb).ToList();
+            _wbs.Remove(wb.WorkbookName);
         }
 
         public Excel.Application XLApplication()
@@ -159,10 +163,12 @@ namespace COMWrapper
 
         public void Dispose()
         {
-            foreach (var wb in _wbs)
+            foreach (var pair in _wbs)
             {
-                wb.Dispose();
+                pair.Value.Dispose();
             }
+            _wbs = null;
+
             _app.Quit();
             Marshal.ReleaseComObject(_app);
             _app = null;

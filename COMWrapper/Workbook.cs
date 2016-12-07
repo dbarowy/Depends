@@ -13,12 +13,14 @@ namespace COMWrapper
         private String _wb_name;
         private bool _fetched_graph = false;
         private DAG.RawGraph _raw_graph;
+        private Action _dispose_callback;
 
-        public Workbook(Excel.Workbook wb, Excel.Application app)
+        public Workbook(Excel.Workbook wb, Excel.Application app, Action dispose_callback)
         {
             _app = app;
             _wb = wb;
             _wb_name = wb.Name;
+            _dispose_callback = dispose_callback;
         }
 
         public void Dispose()
@@ -29,6 +31,7 @@ namespace COMWrapper
                 Marshal.ReleaseComObject(_wb);
                 _wb = null;
             }
+            _dispose_callback();
         }
 
         public DAG buildDependenceGraph()
