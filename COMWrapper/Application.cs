@@ -123,9 +123,12 @@ namespace COMWrapper
 
             // if this workbook has links, break them
             var links = (Array) wbref.LinkSources(Excel.XlLink.xlExcelLinks);
-            for(int i = 1; i <= links.Length; i++)
+            if (links != null)
             {
-                wbref.BreakLink((string)links.GetValue(i), Excel.XlLinkType.xlLinkTypeExcelLinks);
+                for (int i = 1; i <= links.Length; i++)
+                {
+                    wbref.BreakLink((string)links.GetValue(i), Excel.XlLinkType.xlLinkTypeExcelLinks);
+                }
             }
 
             // init wrapped workbook
