@@ -153,7 +153,6 @@ namespace COMWrapper
         public void CloseWorkbook(Workbook wb)
         {
             wb.Dispose();
-            _wbs.Remove(wb.WorkbookName);
         }
 
         public Excel.Application XLApplication()
