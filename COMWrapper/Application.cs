@@ -162,7 +162,9 @@ namespace COMWrapper
 
         public void Dispose()
         {
-            foreach (var pair in _wbs)
+            var to_dispose = _wbs.ToArray();
+
+            foreach (var pair in to_dispose)
             {
                 pair.Value.Dispose();
             }
