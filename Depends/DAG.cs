@@ -837,7 +837,7 @@ namespace Depends
                 foreach (var formula in formulas)
                 {
                     var addr = AST.Address.fromR1C1withMode(formula.Row, formula.Column, AST.AddressMode.Absolute, AST.AddressMode.Absolute, wsname, wbname, path);
-                    if (_formulas[addr] != formula.Data)
+                    if (!_formulas.ContainsKey(addr) || _formulas[addr] != formula.Data)
                     {
                         return true;
                     }
