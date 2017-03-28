@@ -705,7 +705,19 @@ namespace Depends
             // note that this is a 1-based 2D multiarray
             // we grab this in array form so that we can avoid a COM
             // call for every blank-cell check
-            object[,] data = (object[,])urng.Value2;
+            object[,] data;
+            // annoyingly, the return type for Value2 changes depending on the size of the range
+            if (width == 1 && height == 1)
+            {
+                int[] lengths = new int[2] { 1, 1 };
+                int[] lower_bounds = new int[2] { 1, 1 };
+                data = (object[,])Array.CreateInstance(typeof(object), lengths, lower_bounds);
+                data[1, 1] = urng.Value2;
+            }
+            else
+            {   // ok, it really is an array
+                data = (object[,])urng.Value2;
+            }
 
             // if the worksheet contains nothing, data will be null
             if (data != null)
@@ -761,7 +773,18 @@ namespace Depends
             // note that this is a 1-based 2D multiarray
             // we grab this in array form so that we can avoid a COM
             // call for every blank-cell check
-            object[,] data = (object[,])urng.Value2;
+            object[,] data;
+            // annoyingly, the return type for Value2 changes depending on the size of the range
+            if (width == 1 && height == 1)
+            {
+                int[] lengths = new int[2] { 1, 1 };
+                int[] lower_bounds = new int[2] { 1, 1 };
+                data = (object[,])Array.CreateInstance(typeof(object), lengths, lower_bounds);
+                data[1,1] = urng.Value2;
+            } else
+            {   // ok, it really is an array
+                data = (object[,])urng.Value2;
+            }
 
             // if the worksheet contains nothing, data will be null
             if (data != null)
@@ -1502,6 +1525,15 @@ namespace Depends
                         var wsname = range.GetWorksheetName();
                         paths.Add(new Tuple<string, string, string>(dir, wbname, wsname));
                     }
+                }
+
+                // all cells-- this covers paths to cells not referenced by formulas
+                foreach (AST.Address cell in _all_cells.KeysT)
+                {
+                    var dir = cell.Path;
+                    var wbname = cell.WorkbookName;
+                    var wsname = cell.WorksheetName;
+                    paths.Add(new Tuple<string, string, string>(dir, wbname, wsname));
                 }
 
                 _path_closure = paths.OrderBy(key => key.Item1 + key.Item2 + key.Item3).ToArray();
