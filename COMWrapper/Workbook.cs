@@ -45,7 +45,7 @@ namespace COMWrapper
             {
                 if (!_fetched_graph)
                 {
-                    _raw_graph = DAG.FastFormulaRead(_wb);
+                    _raw_graph = DAG.FastFormulaRead(null, _wb);
                     _fetched_graph = true;
                 }
                 return _raw_graph.formulas;

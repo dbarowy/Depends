@@ -339,9 +339,13 @@ namespace Depends
         }
 
         // for callers who do not need progress bars
-        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors) : this(wb, app, ignore_parse_errors, new Progress(() => { }, () => { }, 1L)) { }
+        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors)
+            : this(wb, app, ignore_parse_errors, new Progress(() => { }, () => { }, 1L)) { }
 
         public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
+            : this(null, wb, app, ignore_parse_errors, p) { }
+
+        public DAG(Microsoft.Office.Interop.Excel.Worksheet ws, Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             // start stopwatch
             var sw = new System.Diagnostics.Stopwatch();
@@ -357,7 +361,7 @@ namespace Depends
             }
 
             // bulk read worksheets & set progress total
-            var data = FastFormulaRead(wb);
+            var data = FastFormulaRead(ws, wb);
             _formulas = data.formulas;
             _inputs = data.inputs;
             _f2v = data.f2v;
@@ -905,7 +909,7 @@ namespace Depends
             }
         }
 
-        public static RawGraph FastFormulaRead(Microsoft.Office.Interop.Excel.Workbook wb)
+        public static RawGraph FastFormulaRead(Microsoft.Office.Interop.Excel.Worksheet ws, Microsoft.Office.Interop.Excel.Workbook wb)
         {
             // allocate struct, etc.
             var retVal = new RawGraph(true);
@@ -915,53 +919,70 @@ namespace Depends
             var wbname = wb.Name;
             var path = wb.Path;
 
-            foreach (Microsoft.Office.Interop.Excel.Worksheet worksheet in wb.Worksheets)
+            if (ws != null)
             {
-                // get name once
-                var wsname = worksheet.Name;
-
-                // get used range
-                Microsoft.Office.Interop.Excel.Range urng = worksheet.UsedRange;
-
-                // make address object cache
-                var addrCache = new AddrCache(urng.Count);
-
-                // get formulas
-                var formulas = ReadFormulaStringList(urng);
-
-                // get data
-                var inputs = ReadInputList(urng);
-
-                // get COM refs
-                var refs = ReadCOMRefList(urng);
-
-                // process formulas
-                foreach (var formula in formulas)
+                FastFormulaReadWorksheet(ws, wb, retVal, wbname, path);
+            } else
+            {
+                foreach (Microsoft.Office.Interop.Excel.Worksheet worksheet in wb.Worksheets)
                 {
-                    var addr = addrCache.getAddr(formula.Row, formula.Column, wsname, wbname, path);
-                    retVal.formulas.Add(addr, formula.Data);
-                    retVal.f2v.Add(addr, new HashSet<AST.Range>());
-                    retVal.f2i.Add(addr, new HashSet<AST.Address>());
-                }
-
-                // process data
-                foreach (var input in inputs)
-                {
-                    var addr = addrCache.getAddr(input.Row, input.Column, wsname, wbname, path);
-                    retVal.inputs.Add(addr, input.Data);
-                }
-
-                // process COM refs
-                foreach (var drng in refs)
-                {
-                    var addr = addrCache.getAddr(drng.Row, drng.Column, wsname, wbname, path);
-                    var formula = retVal.formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(retVal.formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
-                    var cr = new ParcelCOMShim.LocalCOMRef(wb, worksheet, drng.Data, path, wbname, wsname, formula, 1, 1);
-                    retVal.allCells.Add(addr, cr);
+                    FastFormulaReadWorksheet(worksheet, wb, retVal, wbname, path);
                 }
             }
 
             return retVal;
+        }
+
+        public static void FastFormulaReadWorksheet(
+                            Microsoft.Office.Interop.Excel.Worksheet worksheet,
+                            Microsoft.Office.Interop.Excel.Workbook wb,
+                            RawGraph retVal,
+                            string wbname,
+                            string path
+                           )
+        {
+            // get name once
+            var wsname = worksheet.Name;
+
+            // get used range
+            Microsoft.Office.Interop.Excel.Range urng = worksheet.UsedRange;
+
+            // make address object cache
+            var addrCache = new AddrCache(urng.Count);
+
+            // get formulas
+            var formulas = ReadFormulaStringList(urng);
+
+            // get data
+            var inputs = ReadInputList(urng);
+
+            // get COM refs
+            var refs = ReadCOMRefList(urng);
+
+            // process formulas
+            foreach (var formula in formulas)
+            {
+                var addr = addrCache.getAddr(formula.Row, formula.Column, wsname, wbname, path);
+                retVal.formulas.Add(addr, formula.Data);
+                retVal.f2v.Add(addr, new HashSet<AST.Range>());
+                retVal.f2i.Add(addr, new HashSet<AST.Address>());
+            }
+
+            // process data
+            foreach (var input in inputs)
+            {
+                var addr = addrCache.getAddr(input.Row, input.Column, wsname, wbname, path);
+                retVal.inputs.Add(addr, input.Data);
+            }
+
+            // process COM refs
+            foreach (var drng in refs)
+            {
+                var addr = addrCache.getAddr(drng.Row, drng.Column, wsname, wbname, path);
+                var formula = retVal.formulas.ContainsKey(addr) ? new Microsoft.FSharp.Core.FSharpOption<string>(retVal.formulas[addr]) : Microsoft.FSharp.Core.FSharpOption<string>.None;
+                var cr = new ParcelCOMShim.LocalCOMRef(wb, worksheet, drng.Data, path, wbname, wsname, formula, 1, 1);
+                retVal.allCells.Add(addr, cr);
+            }
         }
 
         // This seriously ugly method exists because we need to call it from several places,
