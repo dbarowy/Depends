@@ -27,7 +27,7 @@ namespace Depends
     [Serializable]
     public class DAG
     {
-        public static int THIS_VERSION = 5;
+        public static int THIS_VERSION = 6;
         [OptionalField]
         private int _version = THIS_VERSION;
         private readonly long _updateInterval;
