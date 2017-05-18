@@ -488,7 +488,7 @@ namespace Depends
             // run the parser
             var frms = dag.getAllFormulaAddrs();
             var aes = new AddrExpansion[frms.Length];
-            for (int i = 0; i < frms.Length; i++)
+            System.Threading.Tasks.Parallel.For(0, frms.Length, i =>
             {
                 var formula_addr = frms[i];
                 var cr = dag.getCOMRefForAddress(formula_addr);
@@ -496,17 +496,26 @@ namespace Depends
                 var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
 
                 aes[i] = new AddrExpansion(formula_addr, vs, ss);
+            });
+            //for (int i = 0; i < frms.Length; i++)
+            //{
+            //    var formula_addr = frms[i];
+            //    var cr = dag.getCOMRefForAddress(formula_addr);
+            //    var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
+            //    var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
 
-                if (i % dag._updateInterval == 0)
-                {
-                    if (p.IsCancelled())
-                    {
-                        dag._buildWasCancelled = true;
-                        return;
-                    }
-                    p.IncrementCounter();
-                }
-            }
+            //    aes[i] = new AddrExpansion(formula_addr, vs, ss);
+
+            //    if (i % dag._updateInterval == 0)
+            //    {
+            //        if (p.IsCancelled())
+            //        {
+            //            dag._buildWasCancelled = true;
+            //            return;
+            //        }
+            //        p.IncrementCounter();
+            //    }
+            //}
 
             // get all of the open workbooks
             var openWBNames = new HashSet<string>();
