@@ -30,7 +30,6 @@ namespace Depends
         public static int THIS_VERSION = 6;
         [OptionalField]
         private int _version = THIS_VERSION;
-        private readonly long _updateInterval;
         private string _path;
         private string _wbname;
         private string[] _wsnames;
@@ -290,15 +289,12 @@ namespace Depends
                 ParcelCOMShim.COMRef newCR = oldCR.DeserializationCellFixup(addr, app);
                 dag._all_cells[addr] = newCR;
 
-                if (i % (dag._updateInterval * 2) == 0)
+                if (p.IsCancelled())
                 {
-                    if (p.IsCancelled())
-                    {
-                        dag._buildWasCancelled = true;
-                        return;
-                    }
-                    p.IncrementCounter();
+                    dag._buildWasCancelled = true;
+                    return;
                 }
+                p.IncrementCounter();
             }
         }
 
@@ -313,15 +309,12 @@ namespace Depends
                 ParcelCOMShim.COMRef newCR = oldCR.DeserializationRangeFixup(rng, app);
                 dag._all_vectors[rng] = newCR;
 
-                if (i % (dag._updateInterval * 2) == 0)
+                if (p.IsCancelled())
                 {
-                    if (p.IsCancelled())
-                    {
-                        dag._buildWasCancelled = true;
-                        return;
-                    }
-                    p.IncrementCounter();
+                    dag._buildWasCancelled = true;
+                    return;
                 }
+                p.IncrementCounter();
             }
         }
 
@@ -369,10 +362,6 @@ namespace Depends
             _all_cells = data.allCells;
             p.TotalWorkUnits = data.formulas.Count();
 
-            // set update interval (must be set after p.Total,
-            // otherwise it is incorrect).
-            _updateInterval = p.UpdateEvery;
-
             // construct DAG
             ConstructDAG(app, this, ignore_parse_errors, p);
 
@@ -404,7 +393,6 @@ namespace Depends
             _do_not_perturb = new Dictionary<AST.Range, bool>(dag._do_not_perturb);
             _weights = new Dictionary<AST.Address, int>(dag._weights);
             _analysis_time = 0L;
-            _updateInterval = dag._updateInterval;
             _dist_f2i = new SparseMatrix(dag._dist_f2i);
             _dist_i2f = new SparseMatrix(dag._dist_i2f);
         }

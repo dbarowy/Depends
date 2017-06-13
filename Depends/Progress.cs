@@ -12,6 +12,7 @@ namespace Depends
         private ProgressBarIncrementer _progBarIncr;
         private ProgressBarReset _progBarReset;
         private long _workMultiplier = 1;
+        private long _current = 0;
 
         public static Progress NOPProgress()
         {
@@ -35,12 +36,16 @@ namespace Depends
 
         public long UpdateEvery
         {
-            get { return Math.Max(1L, _total / 100L / _workMultiplier); }
+            get { return Math.Max(1L, (_total * _workMultiplier) / 100L); }
         }
 
         public void IncrementCounter()
         {
-            _progBarIncr();
+            _current++;
+            if (_current % UpdateEvery == 0)
+            {
+                _progBarIncr();
+            }
         }
 
         public void Cancel()
