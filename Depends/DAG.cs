@@ -49,8 +49,6 @@ namespace Depends
         private PathTuple[] _path_closure;                                  // the set of paths referenced by formulas in this DAG
         private PathIndexDict _path_closure_index;                          // the index of a path in the ordered array of closed-over paths
         private bool _buildWasCancelled = false;                            // set true if DAG building/deserialization was cancelled
-        private SparseMatrix _dist_f2i;                                     // distances of all simple paths from formulas to inputs
-        private SparseMatrix _dist_i2f;                                     // distances of all simple paths from inputs to formulas
 
         [OnDeserializing]
         private void SetVersionDefault(StreamingContext sc)
@@ -227,10 +225,6 @@ namespace Depends
             // parse formulas and rebuild graph
             ConstructDAG(app, dag2, ignore_parse_errors, p);
 
-            // re-find all-pairs-all-simple-paths
-            _dist_f2i = AllSimplePaths(this, p);
-            _dist_i2f = _dist_f2i.Transpose();
-
             return dag2;
         }
 
@@ -365,10 +359,6 @@ namespace Depends
             // construct DAG
             ConstructDAG(app, this, ignore_parse_errors, p);
 
-            // find all-pairs-all-simple-paths
-            _dist_f2i = AllSimplePaths(this, p);
-            _dist_i2f = _dist_f2i.Transpose();
-
             // stop stopwatch
             sw.Stop();
             _analysis_time = sw.ElapsedMilliseconds;
@@ -393,8 +383,6 @@ namespace Depends
             _do_not_perturb = new Dictionary<AST.Range, bool>(dag._do_not_perturb);
             _weights = new Dictionary<AST.Address, int>(dag._weights);
             _analysis_time = 0L;
-            _dist_f2i = new SparseMatrix(dag._dist_f2i);
-            _dist_i2f = new SparseMatrix(dag._dist_i2f);
         }
 
         private Boolean NeedsWorkbookOpen(AST.Range r, HashSet<string> openWBNames)
@@ -1547,26 +1535,6 @@ namespace Depends
         public bool IsCancelled()
         {
             return _buildWasCancelled;
-        }
-
-        public HashSet<int> DistancesFromFormulaToInput(AST.Address faddr, AST.Address iaddr)
-        {
-            return _dist_f2i.Distances(faddr, iaddr);
-        }
-
-        public HashSet<int> DistancesFromInputToFormula(AST.Address iaddr, AST.Address faddr)
-        {
-            return _dist_i2f.Distances(iaddr, faddr);
-        }
-
-        public Dictionary<AST.Address,HashSet<int>> AllRefDistancesFromFormula(AST.Address faddr)
-        {
-            return _dist_f2i.AllRefDistances(faddr);
-        }
-
-        public Dictionary<AST.Address,HashSet<int>> AllRefDistancesFromInput(AST.Address iaddr)
-        {
-            return _dist_i2f.AllRefDistances(iaddr);
         }
     }
 }
