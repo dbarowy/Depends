@@ -2,7 +2,7 @@
 
 namespace Depends
 {
-    public delegate void ProgressBarIncrementer();
+    public delegate void ProgressBarIncrementer(int n);
     public delegate void ProgressBarReset();
 
     public class Progress
@@ -16,7 +16,7 @@ namespace Depends
 
         public static Progress NOPProgress()
         {
-            ProgressBarIncrementer pbi = () => { return; };
+            ProgressBarIncrementer pbi = (int n) => { return; };
             ProgressBarReset pbr = () => { return; };
             return new Progress(pbi, pbr, 1L);
         }
@@ -41,10 +41,15 @@ namespace Depends
 
         public void IncrementCounter()
         {
-            _current++;
+            IncrementCounterN(1);
+        }
+
+        public void IncrementCounterN(int n)
+        {
+            _current += n;
             if (_current % UpdateEvery == 0)
             {
-                _progBarIncr();
+                _progBarIncr(n);
             }
         }
 

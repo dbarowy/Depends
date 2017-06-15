@@ -327,7 +327,7 @@ namespace Depends
 
         // for callers who do not need progress bars
         public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors)
-            : this(wb, app, ignore_parse_errors, new Progress(() => { }, () => { }, 1L)) { }
+            : this(wb, app, ignore_parse_errors, new Progress(n => { }, () => { }, 1L)) { }
 
         public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
             : this(null, wb, app, ignore_parse_errors, p) { }
