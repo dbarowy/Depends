@@ -20,6 +20,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using AddrFunList = Microsoft.FSharp.Collections.FSharpList<AST.Address>;
 
 namespace Depends
@@ -27,9 +28,10 @@ namespace Depends
     [Serializable]
     public class DAG
     {
-        public static int THIS_VERSION = 6;
+        public static int THIS_VERSION = 7;
         [OptionalField]
         private int _version = THIS_VERSION;
+        private DateTime _dagBuilt;
         private string _path;
         private string _wbname;
         private string[] _wsnames;
@@ -48,7 +50,6 @@ namespace Depends
         private readonly long _analysis_time;                               // amount of time to run dependence analysis
         private PathTuple[] _path_closure;                                  // the set of paths referenced by formulas in this DAG
         private PathIndexDict _path_closure_index;                          // the index of a path in the ordered array of closed-over paths
-        private bool _buildWasCancelled = false;                            // set true if DAG building/deserialization was cancelled
 
         [OnDeserializing]
         private void SetVersionDefault(StreamingContext sc)
@@ -136,6 +137,9 @@ namespace Depends
         public DAG CopyWithUpdatedFormulas(KeyValuePair<AST.Address,string>[] formulas, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
         {
             var dag2 = new DAG(this);
+
+            // copy build time
+            dag2._dagBuilt = _dagBuilt;
 
             // clear graph
             dag2._inputs.Clear();
@@ -242,7 +246,7 @@ namespace Depends
             return File.Exists(fileName);
         }
 
-        public static DAG DAGFromCache(Boolean forceDAGBuild, Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
+        public static DAG DAGFromCache(Boolean forceDAGBuild, Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p, CancellationToken t)
         {
             // get path
             var fileName = SerializationPath(cacheDirPath, wb.Name);
@@ -250,93 +254,106 @@ namespace Depends
             // return DAG from cache path, otherwise build and serialize to cache path
             if (!forceDAGBuild && CachedDAGExists(cacheDirPath, wb.Name))
             {
-                var dag = DeserializeFrom(fileName, app, p);
+                var dag = DeserializeFrom(fileName, app, p, t);
+
+                if (t.IsCancellationRequested)
+                {
+                    return null;
+                }
 
                 if (dag._version != THIS_VERSION)
                 {
                     p.Reset();
-                    dag = newDAG(wb, app, ignore_parse_errors, cacheDirPath, p);
+                    dag = newDAG(wb, app, ignore_parse_errors, cacheDirPath, p, DateTime.Now);
                 }
 
                 return dag;
             } else
             {
-                return newDAG(wb, app, ignore_parse_errors, cacheDirPath, p);
+                return newDAG(wb, app, ignore_parse_errors, cacheDirPath, p, DateTime.Now);
             }
         }
 
-        private static DAG newDAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p)
+        private static DAG newDAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, string cacheDirPath, Progress p, DateTime dagBuilt)
         {
-            var dag = new DAG(wb, app, ignore_parse_errors, p);
+            var dag = new DAG(wb, app, ignore_parse_errors, p, dagBuilt);
             dag.SerializeToDirectory(cacheDirPath);
             return dag;
         }
 
-        private static void reconstituteAddressRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app, Progress p)
+        private static void reconstituteAddressRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app, Progress p, CancellationToken t)
         {
             var allAddrs = dag.allCells();
 
             for (int i = 0; i < allAddrs.Length; i++)
             {
+                if (t.IsCancellationRequested)
+                {
+                    return;
+                }
+
                 AST.Address addr = allAddrs[i];
                 ParcelCOMShim.COMRef oldCR = dag._all_cells[addr];
                 ParcelCOMShim.COMRef newCR = oldCR.DeserializationCellFixup(addr, app);
                 dag._all_cells[addr] = newCR;
 
-                if (p.IsCancelled())
-                {
-                    dag._buildWasCancelled = true;
-                    return;
-                }
                 p.IncrementCounter();
             }
         }
 
-        private static void reconstituteRangeRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app, Progress p)
+        private static void reconstituteRangeRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app, Progress p, CancellationToken t)
         {
             var allVectors = dag.allVectors();
 
             for (int i = 0; i < allVectors.Length; i++)
             {
+                if (t.IsCancellationRequested)
+                {
+                    return;
+                }
+
                 AST.Range rng = allVectors[i];
                 ParcelCOMShim.COMRef oldCR = dag._all_vectors[rng];
                 ParcelCOMShim.COMRef newCR = oldCR.DeserializationRangeFixup(rng, app);
                 dag._all_vectors[rng] = newCR;
 
-                if (p.IsCancelled())
-                {
-                    dag._buildWasCancelled = true;
-                    return;
-                }
                 p.IncrementCounter();
             }
         }
 
-        public static DAG DeserializeFrom(string fileName, Microsoft.Office.Interop.Excel.Application app, Progress p)
+        public static DAG DeserializeFrom(string fileName, Microsoft.Office.Interop.Excel.Application app, Progress p, CancellationToken t)
         {
             IFormatter formatter = new BinaryFormatter();
             Stream stream = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read);
             DAG obj = (DAG)formatter.Deserialize(stream);
             stream.Close();
 
-            reconstituteAddressRefs(obj, app, p);
-            reconstituteRangeRefs(obj, app, p);
+            reconstituteAddressRefs(obj, app, p, t);
+            reconstituteRangeRefs(obj, app, p, t);
+
+            if (t.IsCancellationRequested)
+            {
+                return null;
+            }
 
             return obj;
         }
 
         // for callers who do not need progress bars
-        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors)
-            : this(wb, app, ignore_parse_errors, new Progress(n => { }, () => { }, 1L)) { }
+        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, DateTime dagBuilt)
+            : this(wb, app, ignore_parse_errors, new Progress(n => { }, () => { }, 1L), dagBuilt) { }
 
-        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
-            : this(null, wb, app, ignore_parse_errors, p) { }
+        public DAG(Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p, DateTime dagBuilt)
+            : this(null, wb, app, ignore_parse_errors, p, dagBuilt) { }
 
-        public DAG(Microsoft.Office.Interop.Excel.Worksheet ws, Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p)
+        public DAG(Microsoft.Office.Interop.Excel.Worksheet ws, Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p, DateTime dagBuilt)
         {
             // start stopwatch
             var sw = new System.Diagnostics.Stopwatch();
             sw.Start();
+
+            // set build time
+            _dagBuilt = dagBuilt;
 
             // save application & workbook references
             _path = wb.Path;
@@ -367,6 +384,7 @@ namespace Depends
         // copy constructor
         public DAG(DAG dag)
         {
+            _dagBuilt = dag._dagBuilt;
             _path = dag._path;
             _wbname = dag._wbname;
             _wsnames = dag._wsnames;
@@ -473,25 +491,6 @@ namespace Depends
 
                 aes[i] = new AddrExpansion(formula_addr, vs, ss);
             });
-            //for (int i = 0; i < frms.Length; i++)
-            //{
-            //    var formula_addr = frms[i];
-            //    var cr = dag.getCOMRefForAddress(formula_addr);
-            //    var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
-            //    var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
-
-            //    aes[i] = new AddrExpansion(formula_addr, vs, ss);
-
-            //    if (i % dag._updateInterval == 0)
-            //    {
-            //        if (p.IsCancelled())
-            //        {
-            //            dag._buildWasCancelled = true;
-            //            return;
-            //        }
-            //        p.IncrementCounter();
-            //    }
-            //}
 
             // get all of the open workbooks
             var openWBNames = new HashSet<string>();
@@ -1532,9 +1531,9 @@ namespace Depends
             return _path_closure_index[path];
         }
 
-        public bool IsCancelled()
+        public DateTime Built
         {
-            return _buildWasCancelled;
+            get { return _dagBuilt; }
         }
     }
 }

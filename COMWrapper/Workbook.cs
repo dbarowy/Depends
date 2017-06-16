@@ -36,7 +36,7 @@ namespace COMWrapper
 
         public DAG buildDependenceGraph()
         {
-            return new DAG(_wb, _app, true);
+            return new DAG(_wb, _app, true, DateTime.Now);
         }
 
         public Dictionary<AST.Address,string> Formulas
