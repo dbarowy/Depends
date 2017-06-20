@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using CellRefDict = Depends.BiDictionary<AST.Address, ParcelCOMShim.COMRef>;
 using VectorRefDict = Depends.BiDictionary<AST.Range, ParcelCOMShim.COMRef>;
 using FormulaDict = System.Collections.Generic.Dictionary<AST.Address, string>;
+using ExpressionDict = System.Collections.Generic.Dictionary<AST.Address, AST.Expression>;
 using InputDict = System.Collections.Generic.Dictionary<AST.Address, object>;
 using Formula2VectDict = System.Collections.Generic.Dictionary<AST.Address, System.Collections.Generic.HashSet<AST.Range>>;
 using Vect2FormulaDict = System.Collections.Generic.Dictionary<AST.Range, System.Collections.Generic.HashSet<AST.Address>>;
@@ -38,6 +39,7 @@ namespace Depends
         private CellRefDict _all_cells = new CellRefDict();                 // maps every cell address (including formulas) to its COMRef
         private VectorRefDict _all_vectors = new VectorRefDict();           // maps every vector to its COMRef
         private FormulaDict _formulas = new FormulaDict();                  // maps every formula to its formula expr
+        private ExpressionDict _asts = new ExpressionDict();                // maps every formula address to its AST
         private InputDict _inputs = new InputDict();                        // maps every cell address (including formulas) to its data
         private Formula2VectDict _f2v = new Formula2VectDict();             // maps every formula to its input vectors
         private Vect2FormulaDict _v2f = new Vect2FormulaDict();             // maps every input vector to its formulas
@@ -47,9 +49,11 @@ namespace Depends
         private InputCell2FormulaDict _i2f = new InputCell2FormulaDict();   // maps every single-cell input to its formulas
         private Dictionary<AST.Range, bool> _do_not_perturb = new Dictionary<AST.Range, bool>();    // vector perturbability
         private Dictionary<AST.Address, int> _weights = new Dictionary<AST.Address, int>();         // graph node weight
-        private readonly long _analysis_time;                               // amount of time to run dependence analysis
         private PathTuple[] _path_closure;                                  // the set of paths referenced by formulas in this DAG
         private PathIndexDict _path_closure_index;                          // the index of a path in the ordered array of closed-over paths
+
+        // timing measurements
+        private readonly long _analysis_time;                               // amount of time to run dependence analysis
 
         [OnDeserializing]
         private void SetVersionDefault(StreamingContext sc)
@@ -366,7 +370,9 @@ namespace Depends
 
             // bulk read worksheets & set progress total
             var data = FastFormulaRead(ws, wb);
+            
             _formulas = data.formulas;
+            _asts = data.asts;
             _inputs = data.inputs;
             _f2v = data.f2v;
             _f2i = data.f2i;
@@ -426,7 +432,7 @@ namespace Depends
 
         public AST.Expression getASTofFormulaAt(AST.Address addr)
         {
-            return Parcel.parseFormulaAtAddress(addr, this.getFormulaAtAddress(addr));
+            return _asts[addr];
         }
 
         /// <summary>
@@ -479,15 +485,16 @@ namespace Depends
 
         public static void ConstructDAG(Microsoft.Office.Interop.Excel.Application app, DAG dag, bool ignore_parse_errors, Progress p)
         {
-            // run the parser
+            // extract addresses from ASTs
             var frms = dag.getAllFormulaAddrs();
             var aes = new AddrExpansion[frms.Length];
             System.Threading.Tasks.Parallel.For(0, frms.Length, i =>
             {
                 var formula_addr = frms[i];
                 var cr = dag.getCOMRefForAddress(formula_addr);
-                var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
-                var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
+                var ast = dag.getASTofFormulaAt(formula_addr);
+                var vs = Parcel.rangeReferencesFromExpr(ast);
+                var ss = Parcel.addrReferencesFromExpr(ast);
 
                 aes[i] = new AddrExpansion(formula_addr, vs, ss);
             });
@@ -545,6 +552,7 @@ namespace Depends
         public struct RawGraph
         {
             public FormulaDict formulas;
+            public ExpressionDict asts;
             public InputDict inputs;
             public Formula2VectDict f2v;
             public Formula2InputCellDict f2i;
@@ -553,6 +561,7 @@ namespace Depends
             public RawGraph(bool yeah)
             {
                 formulas = new FormulaDict();
+                asts = new ExpressionDict();
                 inputs = new InputDict();
                 f2v = new Formula2VectDict();
                 f2i = new Formula2InputCellDict();
@@ -574,7 +583,7 @@ namespace Depends
             }
         }
 
-        private static List<DataAt<string>> ReadFormulaStringList(Microsoft.Office.Interop.Excel.Range urng)
+        private static void ReadFormulaStringList(Microsoft.Office.Interop.Excel.Range urng, out List<DataAt<string>> formulas, out List<DataAt<AST.Expression>> asts)
         {
             // init R1C1 extractor
             var regex = new Regex("^R([0-9]+)C([0-9]+)$", RegexOptions.Compiled);
@@ -592,8 +601,9 @@ namespace Depends
             int width = right - left + 1;
             int height = bottom - top + 1;
 
-            // output
-            var fList = new List<DataAt<string>>();
+            // init outputs
+            formulas = new List<DataAt<string>>();
+            asts = new List<DataAt<AST.Expression>>();
 
             // if the used range is a single cell, Excel changes the type
             if (left == right && top == bottom)
@@ -602,37 +612,76 @@ namespace Depends
 
                 if (fn_filter.IsMatch(f))
                 {
-                    fList.Add(new DataAt<string>(top, left, f));
+                    var row = top;
+                    var col = left;
+                    formulas.Add(new DataAt<string>(row, col, f));
+                    asts.Add(new DataAt<AST.Expression>(row, col, Parse(f, urng)));
                 }
             }
             else
             {
                 // array read of formula cells
                 // note that this is a 1-based 2D multiarray
-                object[,] formulas = (object[,])urng.Formula;
+                object[,] fObjs = (object[,])urng.Formula;
 
-                // for every cell that is actually a formula, add to 
-                // formula dictionary & init formula lookup dictionaries
+                // quickly find all the formula candidates
+                var parseThese = new DataAt<string>[width * height];
                 for (int c = 1; c <= width; c++)
                 {
                     for (int r = 1; r <= height; r++)
                     {
-                        var f = (string)formulas[r, c];
-                        if (fn_filter.IsMatch(f) && IsReallyAFormula(f, urng))
+                        // quick check using fast regex
+                        var f = (string)fObjs[r, c];
+                        if (fn_filter.IsMatch(f))
                         {
-                            fList.Add(new DataAt<string>(r + top - 1, c + left - 1, f));
+                            var row = r + top - 1;
+                            var col = c + left - 1;
+                            // a simple mapping function from x,y to indices in array
+                            var i = ((c - 1) % width) + width * (r - 1);
+                            parseThese[i] = new DataAt<string>(row, col, f);
                         }
                     }
                 }
+
+                // init output array
+                var parsed = new DataAt<AST.Expression>[parseThese.Length];
+
+                // parse in parallel
+                System.Threading.Tasks.Parallel.For(0, parseThese.Length, i =>
+                {
+                    DataAt<string> candidate = parseThese[i];
+                    // parse for real (slow)
+                    if (candidate.Data != null)
+                    {
+                        parsed[i] = new DataAt<AST.Expression>(candidate.Row, candidate.Column, Parse(candidate.Data, urng));
+                    }
+                    
+                });
+
+                // for every cell that is actually a formula, add to 
+                // formula dictionary & init formula lookup dictionaries
+                for (int i = 0; i < parsed.Length; i++)
+                {
+                    if (parsed[i].Data != null)
+                    {
+                        formulas.Add(parseThese[i]);
+                        asts.Add(parsed[i]);
+                    }
+                }
             }
-            return fList;
         }
 
-        private static bool IsReallyAFormula(string formula, Microsoft.Office.Interop.Excel.Range used_range)
+        private static AST.Expression Parse(string formula, Microsoft.Office.Interop.Excel.Range used_range)
         {
             var wb = WorkbookFromRange(used_range);
             var ast_opt = Parcel.parseFormula(formula, wb.Path, wb.Name, used_range.Worksheet.Name);
-            return Microsoft.FSharp.Core.FSharpOption<AST.Expression>.get_IsSome(ast_opt);
+            if (Microsoft.FSharp.Core.FSharpOption<AST.Expression>.get_IsSome(ast_opt))
+            {
+                return ast_opt.Value;
+            } else
+            {
+                return null;
+            }
         }
 
         private static Microsoft.Office.Interop.Excel.Workbook WorkbookFromRange(Microsoft.Office.Interop.Excel.Range r)
@@ -791,7 +840,9 @@ namespace Depends
                 Microsoft.Office.Interop.Excel.Range urng = worksheet.UsedRange;
 
                 // get formulas
-                var formulas = ReadFormulaStringList(urng);
+                List<DataAt<string>> formulas;
+                List<DataAt<AST.Expression>> asts;
+                ReadFormulaStringList(urng, out formulas, out asts);
 
                 // short-circuit for formula additions and removals
                 var fcnt = _formulas.Where(pair => pair.Key.A1Worksheet() == wsname).Count();
@@ -935,7 +986,9 @@ namespace Depends
             var addrCache = new AddrCache(urng.Count);
 
             // get formulas
-            var formulas = ReadFormulaStringList(urng);
+            List<DataAt<string>> formulas;
+            List <DataAt<AST.Expression>> asts;
+            ReadFormulaStringList(urng, out formulas, out asts);
 
             // get data
             var inputs = ReadInputList(urng);
@@ -950,6 +1003,13 @@ namespace Depends
                 retVal.formulas.Add(addr, formula.Data);
                 retVal.f2v.Add(addr, new HashSet<AST.Range>());
                 retVal.f2i.Add(addr, new HashSet<AST.Address>());
+            }
+
+            // process asts
+            foreach (var ast in asts)
+            {
+                var addr = addrCache.getAddr(ast.Row, ast.Column, wsname, wbname, path);
+                retVal.asts.Add(addr, ast.Data);
             }
 
             // process data
