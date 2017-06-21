@@ -47,9 +47,13 @@ namespace Depends
         private InputCell2FormulaDict _i2f = new InputCell2FormulaDict();   // maps every single-cell input to its formulas
         private Dictionary<AST.Range, bool> _do_not_perturb = new Dictionary<AST.Range, bool>();    // vector perturbability
         private Dictionary<AST.Address, int> _weights = new Dictionary<AST.Address, int>();         // graph node weight
-        private readonly long _analysis_time;                               // amount of time to run dependence analysis
         private PathTuple[] _path_closure;                                  // the set of paths referenced by formulas in this DAG
         private PathIndexDict _path_closure_index;                          // the index of a path in the ordered array of closed-over paths
+
+        // timing information
+        private readonly long _marshaling_time;                             // time spent reading from Excel
+        private readonly long _parsing_time;                                // time spend parsing
+        private readonly long _graph_construction_time;                     // amount of time to run dependence analysis
 
         [OnDeserializing]
         private void SetVersionDefault(StreamingContext sc)
@@ -98,6 +102,25 @@ namespace Depends
                 {
                     return _added;
                 }
+            }
+        }
+
+        public struct Time
+        {
+            long _parsing_ms;
+            long _graph_ms;
+            public Time(long parsing_ms, long graph_ms)
+            {
+                _parsing_ms = parsing_ms;
+                _graph_ms = graph_ms;
+            }
+            public long ParsingMs
+            {
+                get { return _parsing_ms; }
+            }
+            public long GraphMs
+            {
+                get { return _graph_ms; }
             }
         }
 
@@ -349,8 +372,8 @@ namespace Depends
         public DAG(Microsoft.Office.Interop.Excel.Worksheet ws, Microsoft.Office.Interop.Excel.Workbook wb, Microsoft.Office.Interop.Excel.Application app, bool ignore_parse_errors, Progress p, DateTime dagBuilt)
         {
             // start stopwatch
-            var sw = new System.Diagnostics.Stopwatch();
-            sw.Start();
+            var marshal_sw = new System.Diagnostics.Stopwatch();
+            marshal_sw.Start();
 
             // set build time
             _dagBuilt = dagBuilt;
@@ -373,12 +396,16 @@ namespace Depends
             _all_cells = data.allCells;
             p.TotalWorkUnits = data.formulas.Count();
 
-            // construct DAG
-            ConstructDAG(app, this, ignore_parse_errors, p);
+            // stop marshaling stopwatch
+            marshal_sw.Stop();
 
-            // stop stopwatch
-            sw.Stop();
-            _analysis_time = sw.ElapsedMilliseconds;
+            // construct DAG
+            var dag_ms = ConstructDAG(app, this, ignore_parse_errors, p);
+
+            // write timing to object
+            _marshaling_time = marshal_sw.ElapsedMilliseconds;
+            _parsing_time = dag_ms.ParsingMs;
+            _graph_construction_time = dag_ms.GraphMs;
         }
 
         // copy constructor
@@ -400,7 +427,9 @@ namespace Depends
             _i2f = new Formula2InputCellDict(dag._i2f);
             _do_not_perturb = new Dictionary<AST.Range, bool>(dag._do_not_perturb);
             _weights = new Dictionary<AST.Address, int>(dag._weights);
-            _analysis_time = 0L;
+            _marshaling_time = dag._marshaling_time;
+            _parsing_time = dag._parsing_time;
+            _graph_construction_time = dag._graph_construction_time;
         }
 
         private Boolean NeedsWorkbookOpen(AST.Range r, HashSet<string> openWBNames)
@@ -477,8 +506,12 @@ namespace Depends
             return m;
         }
 
-        public static void ConstructDAG(Microsoft.Office.Interop.Excel.Application app, DAG dag, bool ignore_parse_errors, Progress p)
+        public static Time ConstructDAG(Microsoft.Office.Interop.Excel.Application app, DAG dag, bool ignore_parse_errors, Progress p)
         {
+            var parse_sw = new System.Diagnostics.Stopwatch();
+            var graph_sw = new System.Diagnostics.Stopwatch();
+            parse_sw.Start();
+
             // run the parser
             var frms = dag.getAllFormulaAddrs();
             var aes = new AddrExpansion[frms.Length];
@@ -486,11 +519,22 @@ namespace Depends
             {
                 var formula_addr = frms[i];
                 var cr = dag.getCOMRefForAddress(formula_addr);
+                //try
+                //{
+                //    var ast = Parcel.parseFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName);
+                //} catch (Exception)
+                //{
+
+                //}
+                
                 var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
                 var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
 
                 aes[i] = new AddrExpansion(formula_addr, vs, ss);
             });
+
+            parse_sw.Stop();
+            graph_sw.Start();
 
             // get all of the open workbooks
             var openWBNames = new HashSet<string>();
@@ -531,6 +575,9 @@ namespace Depends
                     dag.linkSingleCellInput(formula_addr, input_addr);
                 }
             }
+
+            graph_sw.Stop();
+            return new Time(parse_sw.ElapsedMilliseconds, graph_sw.ElapsedMilliseconds);
         }
 
         // this is mostly for diagnostic purposes
@@ -996,9 +1043,19 @@ namespace Depends
             }
         }
 
-        public long AnalysisMilliseconds
+        public long TimeMarshalingMilliseconds
         {
-            get { return _analysis_time; }
+            get { return _marshaling_time; }
+        }
+
+        public long TimeParsingMilliseconds
+        {
+            get { return _parsing_time; }
+        }
+
+        public long TimeGraphConstructionMilliseconds
+        {
+            get { return _graph_construction_time; }
         }
 
         public ParcelCOMShim.COMRef getCOMRefForAddress(AST.Address addr)
