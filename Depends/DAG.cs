@@ -519,18 +519,17 @@ namespace Depends
             {
                 var formula_addr = frms[i];
                 var cr = dag.getCOMRefForAddress(formula_addr);
-                //try
-                //{
-                //    var ast = Parcel.parseFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName);
-                //} catch (Exception)
-                //{
+                try
+                {
+                    var ast = Parcel.parseFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName);
+                    var vs = Parcel.rangeReferencesFromExpr(ast.Value);
+                    var ss = Parcel.addrReferencesFromExpr(ast.Value);
+                    aes[i] = new AddrExpansion(formula_addr, vs, ss);
+                }
+                catch (Exception)
+                {
 
-                //}
-                
-                var vs = Parcel.rangeReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
-                var ss = Parcel.addrReferencesFromFormula(cr.Formula, cr.Path, cr.WorkbookName, cr.WorksheetName, ignore_parse_errors);
-
-                aes[i] = new AddrExpansion(formula_addr, vs, ss);
+                }
             });
 
             parse_sw.Stop();
