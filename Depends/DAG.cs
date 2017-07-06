@@ -1033,6 +1033,10 @@ namespace Depends
             // if the address is unresolvable or points to a
             // cell not in the dependence graph (e.g., empty cells)
             // return the empty string
+            if (!_all_cells.ContainsKey(addr)) {
+                return String.Empty;
+            }
+
             try
             {
                 // null values become the empty string
