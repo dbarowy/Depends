@@ -1030,15 +1030,24 @@ namespace Depends
 
         public string readCOMValueAtAddress(AST.Address addr)
         {
-            // null values become the empty string
-            var s = System.Convert.ToString(this.getCOMRefForAddress(addr).Range.Value2);
-            if (s == null)
+            // if the address is unresolvable or points to a
+            // cell not in the dependence graph (e.g., empty cells)
+            // return the empty string
+            try
             {
-                return "";
-            }
-            else
+                // null values become the empty string
+                var s = Convert.ToString(this.getCOMRefForAddress(addr).Range.Value2);
+                if (s == null)
+                {
+                    return String.Empty;
+                }
+                else
+                {
+                    return s;
+                }
+            } catch (Exception)
             {
-                return s;
+                return String.Empty;
             }
         }
 
