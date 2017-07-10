@@ -1478,6 +1478,38 @@ namespace Depends
             return _all_cells.KeysT.ToArray();
         }
 
+        public AST.Address[] allCellsIncludingBlanks()
+        {
+            var ac = _all_cells.KeysT.ToArray();
+
+            var ac_by_ws = ac.GroupBy(a => a.WorksheetName);
+
+            var ret = new List<AST.Address>();
+
+            foreach (var wsGrp in ac_by_ws)
+            {
+                var rep = wsGrp.First();
+
+                var minX = wsGrp.Select(a => a.X).Min();
+                var maxX = wsGrp.Select(a => a.X).Max();
+                var minY = wsGrp.Select(a => a.Y).Min();
+                var maxY = wsGrp.Select(a => a.Y).Max();
+
+                for (var x = minX; x <= maxX; x++)
+                {
+                    for (var y = minY; y <= maxY; y++)
+                    {
+                        var addr = AST.Address.fromR1C1withMode(y, x, AST.AddressMode.Absolute,
+                            AST.AddressMode.Absolute, rep.WorksheetName, rep.WorkbookName, rep.Path);
+
+                        ret.Add(addr);
+                    }
+                }
+            }
+
+            return ret.ToArray();
+        }
+
         public AST.Address[] getFormulasThatRefCell(AST.Address cell)
         {
             if (_i2f.ContainsKey(cell))
