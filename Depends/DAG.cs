@@ -21,6 +21,7 @@ using System.Runtime.Serialization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using Microsoft.Office.Interop.Excel;
 using AddrFunList = Microsoft.FSharp.Collections.FSharpList<AST.Address>;
 
 namespace Depends
@@ -945,7 +946,6 @@ namespace Depends
             var retVal = new RawGraph(true);
 
             // get names once
-            var wbfullname = wb.FullName;
             var wbname = wb.Name;
             var path = wb.Path;
 
@@ -1052,6 +1052,15 @@ namespace Depends
             } catch (Exception)
             {
                 return String.Empty;
+            }
+        }
+        public Dictionary<AST.Address, string> Values
+        {
+            get
+            {
+                return _inputs.Select(kvp =>
+                    new Tuple<AST.Address, string>(kvp.Key, Convert.ToString(kvp.Value))
+                ).ToDictionary(x => x.Item1, x => x.Item2);
             }
         }
 
