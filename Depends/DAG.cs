@@ -275,8 +275,9 @@ namespace Depends
             // get path
             var fileName = SerializationPath(cacheDirPath, wb.Name);
 
-            // return DAG from cache path, otherwise build and serialize to cache path
-            if (!forceDAGBuild && CachedDAGExists(cacheDirPath, wb.Name))
+            // return DAG from cache path, otherwise build and serialize to cache path;
+            // "Book1" is the name of the default, blank workbook-- don't try to use cached version
+            if (wb.Name != "Book1" && !forceDAGBuild && CachedDAGExists(cacheDirPath, wb.Name))
             {
                 var dag = DeserializeFrom(fileName, app, p, t);
 
