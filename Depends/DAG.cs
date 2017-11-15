@@ -308,21 +308,27 @@ namespace Depends
 
         private static void reconstituteAddressRefs(DAG dag, Microsoft.Office.Interop.Excel.Application app, Progress p, CancellationToken t)
         {
-            var allAddrs = dag.allCells();
-
-            for (int i = 0; i < allAddrs.Length; i++)
+            try
             {
-                if (t.IsCancellationRequested)
+                var allAddrs = dag.allCells();
+
+                for (int i = 0; i < allAddrs.Length; i++)
                 {
-                    return;
+                    if (t.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    AST.Address addr = allAddrs[i];
+                    ParcelCOMShim.COMRef oldCR = dag._all_cells[addr];
+                    ParcelCOMShim.COMRef newCR = oldCR.DeserializationCellFixup(addr, app);
+                    dag._all_cells[addr] = newCR;
+
+                    p.IncrementCounter();
                 }
-
-                AST.Address addr = allAddrs[i];
-                ParcelCOMShim.COMRef oldCR = dag._all_cells[addr];
-                ParcelCOMShim.COMRef newCR = oldCR.DeserializationCellFixup(addr, app);
-                dag._all_cells[addr] = newCR;
-
-                p.IncrementCounter();
+            } catch (Exception)
+            {
+                // do nothing
             }
         }
 
