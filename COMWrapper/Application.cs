@@ -128,7 +128,13 @@ namespace COMWrapper
             {
                 for (int i = 1; i <= links.Length; i++)
                 {
-                    wbref.BreakLink((string)links.GetValue(i), Excel.XlLinkType.xlLinkTypeExcelLinks);
+                    try
+                    {
+                        wbref.BreakLink((string)links.GetValue(i), Excel.XlLinkType.xlLinkTypeExcelLinks);
+                    } catch (Exception e)
+                    {
+                        // if the link is unbreakable, oh well
+                    }
                 }
             }
 
