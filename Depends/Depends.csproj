@@ -33,7 +33,7 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="FSharp.Core, Version=4.4.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL" />
+    <Reference Include="FSharp.Core, Version=4.4.3.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL" />
     <Reference Include="Microsoft.Office.Interop.Excel, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
       <EmbedInteropTypes>False</EmbedInteropTypes>
     </Reference>
@@ -57,13 +57,13 @@
     <Compile Include="SparseMatrix.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\xl2fpcore\parcel\Parcel\ExcelParser.fsproj">
+      <Project>{6de2a2b9-c029-4bdb-8992-d16276471d9f}</Project>
+      <Name>ExcelParser</Name>
+    </ProjectReference>
     <ProjectReference Include="..\ParcelCOMShim\ParcelCOMShim\ParcelCOMShim.fsproj">
       <Project>{71e3af28-8088-4f9d-9392-858964d72947}</Project>
       <Name>ParcelCOMShim</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\parcel\Parcel\ExcelParser.fsproj">
-      <Project>{6de2a2b9-c029-4bdb-8992-d16276471d9f}</Project>
-      <Name>ExcelParser</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

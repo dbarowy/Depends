@@ -55,6 +55,10 @@
     <Compile Include="Workbook.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\xl2fpcore\parcel\Parcel\ExcelParser.fsproj">
+      <Project>{6de2a2b9-c029-4bdb-8992-d16276471d9f}</Project>
+      <Name>ExcelParser</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Depends\Depends.csproj">
       <Project>{34fa1bc2-cfd6-44ec-ac0c-dfc62313e4bf}</Project>
       <Name>Depends</Name>
@@ -62,10 +66,6 @@
     <ProjectReference Include="..\ParcelCOMShim\ParcelCOMShim\ParcelCOMShim.fsproj">
       <Project>{71e3af28-8088-4f9d-9392-858964d72947}</Project>
       <Name>ParcelCOMShim</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\parcel\Parcel\ExcelParser.fsproj">
-      <Project>{6de2a2b9-c029-4bdb-8992-d16276471d9f}</Project>
-      <Name>ExcelParser</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
