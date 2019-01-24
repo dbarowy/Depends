@@ -1,8 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Excel = Microsoft.Office.Interop.Excel;
-using Depends;
-using System.Collections.Generic;
+using FastDependenceAnalysis;
 
 namespace COMWrapper
 {
@@ -12,7 +12,7 @@ namespace COMWrapper
         private Excel.Workbook _wb;
         private String _wb_name;
         private bool _fetched_graph = false;
-        private DAG.RawGraph _raw_graph;
+        private Graphs _graphs;
         private Action _dispose_callback;
 
         public Workbook(Excel.Workbook wb, Excel.Application app, Action dispose_callback)
@@ -30,26 +30,23 @@ namespace COMWrapper
                 _wb.Close(SaveChanges: false);
                 Marshal.ReleaseComObject(_wb);
                 _wb = null;
+                _dispose_callback();
             }
-            _dispose_callback();
         }
 
-        public DAG buildDependenceGraph()
+        public Graphs buildDependenceGraph()
         {
-            return new DAG(_wb, _app, true, DateTime.Now);
-        }
-
-        public Dictionary<AST.Address,string> Formulas
-        {
-            get
+            if (!_fetched_graph)
             {
-                if (!_fetched_graph)
+                _graphs = new Graphs(_app, _wb);
+                foreach (Excel.Worksheet ws in _wb.Worksheets)
                 {
-                    _raw_graph = DAG.FastFormulaRead(null, _wb);
-                    _fetched_graph = true;
+                    Marshal.ReleaseComObject(ws);
                 }
-                return _raw_graph.formulas;
+                Marshal.ReleaseComObject(_wb);
+                _fetched_graph = true;
             }
+            return _graphs;
         }
 
         public string WorkbookName
@@ -69,6 +66,15 @@ namespace COMWrapper
         public string Path
         {
             get { return _wb.Path;  }
+        }
+
+        public Dictionary<AST.Address, string> Formulas
+        {
+            get
+            {
+                buildDependenceGraph();
+                return _graphs.Formulas;
+            }
         }
     }
 }

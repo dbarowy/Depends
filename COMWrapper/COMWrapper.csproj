@@ -55,9 +55,9 @@
     <Compile Include="Workbook.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Depends\Depends.csproj">
-      <Project>{34fa1bc2-cfd6-44ec-ac0c-dfc62313e4bf}</Project>
-      <Name>Depends</Name>
+    <ProjectReference Include="..\..\FastDependenceAnalysis\FastDependenceAnalysis.csproj">
+      <Project>{bb6178d3-40c3-442f-902c-5a6cb2eefa1c}</Project>
+      <Name>FastDependenceAnalysis</Name>
     </ProjectReference>
     <ProjectReference Include="..\ParcelCOMShim\ParcelCOMShim\ParcelCOMShim.fsproj">
       <Project>{71e3af28-8088-4f9d-9392-858964d72947}</Project>
